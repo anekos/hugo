@@ -10,10 +10,12 @@ use rusqlite::Connection;
 
 
 
+type ID = String;
+
 enum Operation {
-    Has(i64),
-    Get(i64),
-    Set(i64, Option<String>),
+    Has(ID),
+    Get(ID),
+    Set(ID, Option<String>),
 }
 
 
@@ -46,7 +48,7 @@ fn parse_args() -> Result<(String, Operation), Box<Error>> {
     let file = args.next().ok_or(NotEnoughArguments)?;
     let op = args.next().ok_or(NotEnoughArguments)?;
     let id = args.next().ok_or(NotEnoughArguments)?;
-    let id: i64 = id.parse()?;
+    let id: ID = id.parse()?;
 
     let op = match &*op {
         "has" => Has(id),
@@ -69,7 +71,9 @@ fn app() -> Result<(), Box<Error>> {
     match op {
         Get(id) => exit({
             if let Some(content) = get(&conn, id)? {
-                println!("{}", content);
+                if let Some(content) = content {
+                    println!("{}", content);
+                }
                 0
             } else {
                 1
@@ -83,12 +87,12 @@ fn app() -> Result<(), Box<Error>> {
 
 
 fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
-    conn.execute("CREATE TABLE IF NOT EXISTS flags (id INT8 PRIMARY KEY, content TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", &[]).unwrap();
+    conn.execute("CREATE TABLE IF NOT EXISTS flags (id TEXT PRIMARY KEY, content TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", &[]).unwrap();
     Ok(())
 }
 
 
-fn get(conn: &Connection, id: i64) -> Result<Option<String>, rusqlite::Error> {
+fn get(conn: &Connection, id: ID) -> Result<Option<Option<String>>, rusqlite::Error> {
     use rusqlite::Error::QueryReturnedNoRows;
 
     let result = conn.query_row("SELECT content FROM flags WHERE id = ?;", &[&id], |row| {
@@ -101,14 +105,14 @@ fn get(conn: &Connection, id: i64) -> Result<Option<String>, rusqlite::Error> {
         }
     }
 
-    result
+    result.map(Some)
 }
 
-fn has(conn: &Connection, id: i64) -> Result<bool, rusqlite::Error> {
+fn has(conn: &Connection, id: ID) -> Result<bool, rusqlite::Error> {
     get(conn, id).map(|it| it.is_some())
 }
 
-fn set(conn: &Connection, id: i64, content: &Option<String>) -> Result<(), Box<Error>> {
+fn set(conn: &Connection, id: ID, content: &Option<String>) -> Result<(), Box<Error>> {
     let now = time::get_time();
     conn.execute("UPDATE flags SET content = ?, updated_at = ? WHERE id = ?", &[content, &now, &id])?;
     conn.execute("INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)", &[&id, content, &now, &now])?;
