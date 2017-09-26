@@ -1,0 +1,16 @@
+Usage: hugo has <DATA_FILE> <ID>
+       hugo get <DATA_FILE> <ID>
+       hugo set <DATA_FILE> <ID> [<TEXT>]
+       hugo check <DATA_FILE> <ID> [<TEXT>]
+       hugo swap <DATA_FILE> <ID> [<TEXT>]
+
+has:
+  If <DATA_FILE> has <ID>, `hugo` command succeeds.
+get:
+  If <DATA_FILE> has <ID>, `hugo` command succeeds and print the value.
+set:
+  Set <TEXT> with <ID>.
+check:
+  `has` and `set`
+swap:
+  Same to `check` except that print the old value.
