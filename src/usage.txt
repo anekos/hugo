@@ -1,8 +1,8 @@
-Usage: hugo has <DATA_FILE> <ID>
-       hugo get <DATA_FILE> <ID>
-       hugo set <DATA_FILE> <ID> [<TEXT>]
-       hugo check <DATA_FILE> <ID> [<TEXT>]
-       hugo swap <DATA_FILE> <ID> [<TEXT>]
+Usage: hugo <DB_NAME> has <ID>
+       hugo <DB_NAME> get <ID>
+       hugo <DB_NAME> set <ID> [<TEXT>]
+       hugo <DB_NAME> check <ID> [<TEXT>]
+       hugo <DB_NAME> swap <ID> [<TEXT>]
 
 has:
   If <DATA_FILE> has <ID>, `hugo` command succeeds.
