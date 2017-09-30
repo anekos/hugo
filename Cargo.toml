@@ -6,3 +6,4 @@ authors = ["anekos <anekos@snca.net>"]
 [dependencies]
 rusqlite = "*"
 time = "*"
+app_dirs = "*"

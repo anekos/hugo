@@ -1,16 +1,20 @@
+extern crate app_dirs;
 extern crate rusqlite;
 extern crate time;
 
 use std::env::args;
+use std::path::Path;
 use std::fmt;
 use std::error::Error;
 use std::process::exit;
 
+use app_dirs::*;
 use rusqlite::Connection;
 
 
 
 type ID = String;
+const APP_INFO: AppInfo = AppInfo { name: "chrysoberyl", author: "anekos" };
 pub static USAGE: &'static str = include_str!("usage.txt");
 
 enum Operation {
@@ -74,8 +78,16 @@ fn parse_args() -> Result<(String, Operation), Box<Error>> {
 fn app() -> Result<(), Box<Error>> {
     use self::Operation::*;
 
-    let (file, op) = parse_args()?;
-    let conn = Connection::open(file)?;
+    let (name, op) = parse_args()?;
+    let path = Path::new(&name);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        let mut path = get_app_dir(AppDataType::UserCache, &APP_INFO, "db").unwrap();
+        path.push(&name);
+        path
+    };
+    let conn = Connection::open(path)?;
     create_table(&conn)?;
 
     let ok = match op {
@@ -96,10 +108,10 @@ fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
 }
 
 
-fn get(conn: &Connection, id: &ID) -> Result<Option<Option<String>>, rusqlite::Error> {
+fn get(conn: &Connection, id: &str) -> Result<Option<Option<String>>, rusqlite::Error> {
     use rusqlite::Error::QueryReturnedNoRows;
 
-    let result = conn.query_row("SELECT content FROM flags WHERE id = ?;", &[id], |row| {
+    let result = conn.query_row("SELECT content FROM flags WHERE id = ?;", &[&id], |row| {
         row.get(0)
     });
 
@@ -112,24 +124,24 @@ fn get(conn: &Connection, id: &ID) -> Result<Option<Option<String>>, rusqlite::E
     result.map(Some)
 }
 
-fn has(conn: &Connection, id: &ID) -> Result<bool, rusqlite::Error> {
+fn has(conn: &Connection, id: &str) -> Result<bool, rusqlite::Error> {
     get(conn, id).map(|it| it.is_some())
 }
 
-fn set(conn: &Connection, id: &ID, content: &Option<String>) -> Result<bool, Box<Error>> {
+fn set(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, Box<Error>> {
     let now = time::get_time();
-    conn.execute("UPDATE flags SET content = ?, updated_at = ? WHERE id = ?", &[content, &now, id])?;
-    conn.execute("INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)", &[id, content, &now, &now])?;
+    conn.execute("UPDATE flags SET content = ?, updated_at = ? WHERE id = ?", &[content, &now, &id])?;
+    conn.execute("INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)", &[&id, content, &now, &now])?;
     Ok(true)
 }
 
-fn swap(conn: &Connection, id: &ID, content: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
+fn swap(conn: &Connection, id: &str, content: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
     let result = get(conn, id)?;
     set(conn, id, content)?;
     Ok(result)
 }
 
-fn check(conn: &Connection, id: &ID, content: &Option<String>) -> Result<bool, Box<Error>> {
+fn check(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, Box<Error>> {
     swap(conn, id, content).map(|it| it.is_some())
 }
 
