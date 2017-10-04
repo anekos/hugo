@@ -3,6 +3,7 @@ Usage: hugo <DB_NAME> has <ID>
        hugo <DB_NAME> set <ID> [<TEXT>]
        hugo <DB_NAME> check <ID> [<TEXT>]
        hugo <DB_NAME> swap <ID> [<TEXT>]
+       hugo <DB_NAME> import <SOUCE_DB_FILE_PATH>
 
 has:
   If <DATA_FILE> has <ID>, `hugo` command succeeds.
@@ -14,3 +15,5 @@ check:
   `has` and `set`
 swap:
   Same to `check` except that print the old value.
+import:
+  Import from other Hugo DB

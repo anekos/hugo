@@ -24,6 +24,15 @@ enum Operation {
     Check(ID, Option<String>),
     Set(ID, Option<String>),
     Swap(ID, Option<String>),
+    Import(String),
+}
+
+#[derive(Debug)]
+struct Entry {
+    id: String,
+    content: Option<String>,
+    created_at: String,
+    updated_at: String,
 }
 
 
@@ -57,7 +66,6 @@ fn parse_args() -> Result<(String, Operation), Box<Error>> {
     let file = args.next().ok_or(TooFewArguments)?;
     let op = args.next().ok_or(TooFewArguments)?;
     let id = args.next().ok_or(TooFewArguments)?;
-    let id: ID = id.parse()?;
 
     let op = match &*op {
         "has" => Has(id),
@@ -65,6 +73,7 @@ fn parse_args() -> Result<(String, Operation), Box<Error>> {
         "set" => Set(id, args.next()),
         "swap" => Swap(id, args.next()),
         "check" => Check(id, args.next()),
+        "import" => Import(id),
         unknown => return Err(Box::new(HugoError::Unknown(unknown.to_owned())))
     };
 
@@ -100,6 +109,7 @@ fn app() -> Result<(), Box<Error>> {
         Set(id, content) => set(&conn, &id, &content)?,
         Swap(id, content) => print_content(&swap(&conn, &id, &content)?),
         Check(id, content) => check(&conn, &id, &content)?,
+        Import(ref source) => import(&conn, source)?,
     };
 
     exit(if ok { 0 } else { 1 })
@@ -149,6 +159,27 @@ fn check(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, 
     swap(conn, id, content).map(|it| it.is_some())
 }
 
+fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
+    let source_conn = Connection::open(source_path)?;
+
+    let mut stmt = source_conn.prepare("SELECT id, content, created_at, updated_at FROM flags;").unwrap();
+    let entry_iter = stmt.query_map(&[], |row| {
+        Entry {
+            id: row.get(0),
+            content: row.get(1),
+            created_at: row.get(2),
+            updated_at: row.get(3)
+        }
+    }).unwrap();
+
+    let mut result = true;
+    for entry in entry_iter {
+        let entry = entry?;
+        result &= set(conn, &entry.id, &entry.content)?;
+    }
+
+    Ok(result)
+}
 
 impl fmt::Display for HugoError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
