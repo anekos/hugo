@@ -3,9 +3,10 @@ extern crate rusqlite;
 extern crate time;
 
 use std::env::args;
-use std::path::Path;
-use std::fmt;
 use std::error::Error;
+use std::fmt;
+use std::fs::create_dir_all;
+use std::path::Path;
 use std::process::exit;
 
 use app_dirs::*;
@@ -87,6 +88,9 @@ fn app() -> Result<(), Box<Error>> {
         path.push(&name);
         path
     };
+    if let Some(dir) = path.parent() {
+        create_dir_all(dir)?;
+    }
     let conn = Connection::open(path)?;
     create_table(&conn)?;
 
