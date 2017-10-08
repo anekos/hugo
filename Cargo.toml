@@ -7,3 +7,4 @@ authors = ["anekos <anekos@snca.net>"]
 rusqlite = "*"
 time = "*"
 app_dirs = "*"
+argparse = "*"

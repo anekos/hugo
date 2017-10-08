@@ -1,4 +1,5 @@
 extern crate app_dirs;
+extern crate argparse;
 extern crate rusqlite;
 extern crate time;
 
@@ -6,10 +7,12 @@ use std::env::args;
 use std::error::Error;
 use std::fmt;
 use std::fs::create_dir_all;
+use std::io::sink;
 use std::path::Path;
 use std::process::exit;
 
 use app_dirs::*;
+use argparse::{ArgumentParser, StoreTrue, StoreOption, Store};
 use rusqlite::Connection;
 
 
@@ -38,9 +41,7 @@ struct Entry {
 
 #[derive(Debug)]
 enum HugoError {
-    TooFewArguments,
-    TooManyArguments,
-    Unknown(String),
+    InvalidArgument,
 }
 
 
@@ -57,40 +58,46 @@ fn main() {
 }
 
 
-fn parse_args() -> Result<(String, Operation), Box<Error>> {
+fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
     use self::Operation::*;
-    use self::HugoError::TooFewArguments;
 
-    let mut args = args();
-    let _ = args.next();
-    let file = args.next().ok_or(TooFewArguments)?;
-    let op = args.next().ok_or(TooFewArguments)?;
-    let id = args.next().ok_or(TooFewArguments)?;
+    let mut is_path = false;
+    let mut name = "".to_owned();
+    let mut op = "".to_owned();
+    let mut id = "".to_owned();
+    let mut arg: Option<String> = None;
+
+    {
+        let mut ap = ArgumentParser::new();
+        ap.set_description("Hugo. Simple flag database");
+        ap.refer(&mut is_path).add_option(&["-p", "--path"], StoreTrue, "Database name As a file path");
+        ap.refer(&mut name).add_argument("Name", Store, "Database name").required();
+        ap.refer(&mut op).add_argument("Operation", Store, "Operation (has/get/set/swap/check/import)").required();
+        ap.refer(&mut id).add_argument("ID", Store, "Data ID").required();
+        ap.refer(&mut arg).add_argument("Argument", StoreOption, "The argument of operation");
+        ap.parse(args().collect(), &mut sink(), &mut sink()).map_err(|_| HugoError::InvalidArgument)?;
+    }
 
     let op = match &*op {
         "has" => Has(id),
         "get" => Get(id),
-        "set" => Set(id, args.next()),
-        "swap" => Swap(id, args.next()),
-        "check" => Check(id, args.next()),
+        "set" => Set(id, arg),
+        "swap" => Swap(id, arg),
+        "check" => Check(id, arg),
         "import" => Import(id),
-        unknown => return Err(Box::new(HugoError::Unknown(unknown.to_owned())))
+        _ => return Err(Box::new(HugoError::InvalidArgument))
     };
 
-    if args.next().is_some() {
-        return Err(Box::new(HugoError::TooManyArguments))
-    }
-
-    Ok((file, op))
+    Ok((name, is_path, op))
 }
 
 
 fn app() -> Result<(), Box<Error>> {
     use self::Operation::*;
 
-    let (name, op) = parse_args()?;
+    let (name, is_path, op) = parse_args()?;
     let path = Path::new(&name);
-    let path = if path.is_absolute() {
+    let path = if is_path {
         path.to_path_buf()
     } else {
         let mut path = get_app_dir(AppDataType::UserCache, &APP_INFO, "db").unwrap();
@@ -181,14 +188,13 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     Ok(result)
 }
 
+
 impl fmt::Display for HugoError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::HugoError::*;
 
         match *self {
-            TooFewArguments => write!(f, "Too few arguments"),
-            TooManyArguments => write!(f, "Too many arguments"),
-            Unknown(ref content) => write!(f, "Unknown operation: {}", content),
+            InvalidArgument => write!(f, "Invalid argument"),
         }
     }
 }
@@ -198,9 +204,7 @@ impl Error for HugoError {
         use self::HugoError::*;
 
         match *self {
-            TooFewArguments => "Too few arguments",
-            TooManyArguments => "Too many arguments",
-            Unknown(_) => "Unknown operation",
+            InvalidArgument => "Invalid argument",
         }
     }
 
