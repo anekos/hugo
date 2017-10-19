@@ -18,7 +18,7 @@ use rusqlite::Connection;
 
 
 type ID = String;
-const APP_INFO: AppInfo = AppInfo { name: "chrysoberyl", author: "anekos" };
+const APP_INFO: AppInfo = AppInfo { name: "hugo", author: "anekos" };
 pub static USAGE: &'static str = include_str!("usage.txt");
 
 enum Operation {
@@ -27,6 +27,7 @@ enum Operation {
     Check(ID, Option<String>),
     Set(ID, Option<String>),
     Swap(ID, Option<String>),
+    Modify(ID, Option<String>, bool),
     Import(String),
 }
 
@@ -84,6 +85,8 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
         "set" => Set(id, arg),
         "swap" => Swap(id, arg),
         "check" => Check(id, arg),
+        "inc" => Modify(id, arg, false),
+        "dec" => Modify(id, arg, true),
         "import" => Import(id),
         _ => return Err(Box::new(HugoError::InvalidArgument))
     };
@@ -101,7 +104,7 @@ fn app() -> Result<(), Box<Error>> {
         path.to_path_buf()
     } else {
         let mut path = get_app_dir(AppDataType::UserCache, &APP_INFO, "db").unwrap();
-        path.push(&name);
+        path.push(format!("{}.sqlite", name));
         path
     };
     if let Some(dir) = path.parent() {
@@ -113,6 +116,11 @@ fn app() -> Result<(), Box<Error>> {
     let ok = match op {
         Get(id) => print_content(&get(&conn, &id)?),
         Has(id) => has(&conn, &id)?,
+        Modify(id, delta, minus) => {
+            let modified = &modify(&conn, &id, &delta, minus)?;
+            println!("{}", modified);
+            true
+        },
         Set(id, content) => set(&conn, &id, &content)?,
         Swap(id, content) => print_content(&swap(&conn, &id, &content)?),
         Check(id, content) => check(&conn, &id, &content)?,
@@ -154,6 +162,18 @@ fn set(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, Bo
     conn.execute("UPDATE flags SET content = ?, updated_at = ? WHERE id = ?", &[content, &now, &id])?;
     conn.execute("INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)", &[&id, content, &now, &now])?;
     Ok(true)
+}
+
+fn modify(conn: &Connection, id: &str, delta: &Option<String>, minus: bool) -> Result<f64, Box<Error>> {
+    let delta = delta.as_ref().map(|it| it.parse()).unwrap_or(Ok(1.0))?;
+
+    let found = get(conn, id)?;
+    let current = found.and_then(|it| it.map(|it| it.parse())).unwrap_or(Ok(0.0))?;
+    let modified = current + delta * if minus { -1.0 } else { 1.0 };
+
+    set(conn, id, &Some(format!("{}", modified)))?;
+
+    Ok(modified)
 }
 
 fn swap(conn: &Connection, id: &str, content: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
