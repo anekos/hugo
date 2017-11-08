@@ -113,6 +113,8 @@ fn app() -> Result<(), Box<Error>> {
     let conn = Connection::open(path)?;
     create_table(&conn)?;
 
+    conn.execute("BEGIN;", &[])?;
+
     let ok = match op {
         Get(id) => print_content(&get(&conn, &id)?),
         Has(id) => has(&conn, &id)?,
@@ -126,6 +128,8 @@ fn app() -> Result<(), Box<Error>> {
         Check(id, content) => check(&conn, &id, &content)?,
         Import(ref source) => import(&conn, source)?,
     };
+
+    conn.execute("COMMIT;", &[])?;
 
     exit(if ok { 0 } else { 1 })
 }
