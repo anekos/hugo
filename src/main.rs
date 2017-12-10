@@ -29,6 +29,7 @@ enum Operation {
     Swap(ID, Option<String>),
     Modify(ID, Option<String>, bool),
     Import(String),
+    Remove(ID),
 }
 
 #[derive(Debug)]
@@ -83,6 +84,7 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
         "has" => Has(id),
         "get" => Get(id),
         "set" => Set(id, arg),
+        "unset" | "remove" => Remove(id),
         "swap" => Swap(id, arg),
         "check" => Check(id, arg),
         "inc" => Modify(id, arg, false),
@@ -127,6 +129,7 @@ fn app() -> Result<(), Box<Error>> {
         Swap(id, content) => print_content(&swap(&conn, &id, &content)?),
         Check(id, content) => check(&conn, &id, &content)?,
         Import(ref source) => import(&conn, source)?,
+        Remove(id) => remove(&conn, &id)?,
     };
 
     conn.execute("COMMIT;", &[])?;
@@ -210,6 +213,11 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     }
 
     Ok(result)
+}
+
+fn remove(conn: &Connection, id: &str) -> Result<bool, Box<Error>> {
+    let n = conn.execute("DELETE FROM flags WHERE id = ?", &[&id])?;
+    Ok(n == 1)
 }
 
 
