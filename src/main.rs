@@ -23,7 +23,7 @@ pub static USAGE: &'static str = include_str!("usage.txt");
 
 enum Operation {
     Has(ID),
-    Get(ID),
+    Get(ID, Option<String>),
     Check(ID, Option<String>),
     Set(ID, Option<String>),
     Swap(ID, Option<String>),
@@ -82,7 +82,7 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
 
     let op = match &*op {
         "has" => Has(id),
-        "get" => Get(id),
+        "get" => Get(id, arg),
         "set" => Set(id, arg),
         "unset" | "remove" => Remove(id),
         "swap" => Swap(id, arg),
@@ -118,7 +118,7 @@ fn app() -> Result<(), Box<Error>> {
     conn.execute("BEGIN;", &[])?;
 
     let ok = match op {
-        Get(id) => print_content(&get(&conn, &id)?),
+        Get(id, default) => print_content(&get(&conn, &id, default)?),
         Has(id) => has(&conn, &id)?,
         Modify(id, delta, minus) => {
             let modified = &modify(&conn, &id, &delta, minus)?;
@@ -144,7 +144,7 @@ fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
 }
 
 
-fn get(conn: &Connection, id: &str) -> Result<Option<Option<String>>, rusqlite::Error> {
+fn get(conn: &Connection, id: &str, default: Option<String>) -> Result<Option<Option<String>>, rusqlite::Error> {
     use rusqlite::Error::QueryReturnedNoRows;
 
     let result = conn.query_row("SELECT content FROM flags WHERE id = ?;", &[&id], |row| {
@@ -152,8 +152,8 @@ fn get(conn: &Connection, id: &str) -> Result<Option<Option<String>>, rusqlite::
     });
 
     if let Err(ref err) = result {
-        if let QueryReturnedNoRows =  *err {
-             return Ok(None);
+        if let QueryReturnedNoRows = *err {
+             return Ok(default.map(Some));
         }
     }
 
@@ -161,7 +161,7 @@ fn get(conn: &Connection, id: &str) -> Result<Option<Option<String>>, rusqlite::
 }
 
 fn has(conn: &Connection, id: &str) -> Result<bool, rusqlite::Error> {
-    get(conn, id).map(|it| it.is_some())
+    get(conn, id, None).map(|it| it.is_some())
 }
 
 fn set(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, Box<Error>> {
@@ -174,7 +174,7 @@ fn set(conn: &Connection, id: &str, content: &Option<String>) -> Result<bool, Bo
 fn modify(conn: &Connection, id: &str, delta: &Option<String>, minus: bool) -> Result<f64, Box<Error>> {
     let delta = delta.as_ref().map(|it| it.parse()).unwrap_or(Ok(1.0))?;
 
-    let found = get(conn, id)?;
+    let found = get(conn, id, None)?;
     let current = found.and_then(|it| it.map(|it| it.parse())).unwrap_or(Ok(0.0))?;
     let modified = current + delta * if minus { -1.0 } else { 1.0 };
 
@@ -184,7 +184,7 @@ fn modify(conn: &Connection, id: &str, delta: &Option<String>, minus: bool) -> R
 }
 
 fn swap(conn: &Connection, id: &str, content: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
-    let result = get(conn, id)?;
+    let result = get(conn, id, None)?;
     set(conn, id, content)?;
     Ok(result)
 }

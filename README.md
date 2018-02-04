@@ -6,7 +6,7 @@ flag manager for shell script
 $ hugo
 
 Usage: hugo <DB_NAME> has <ID>
-       hugo <DB_NAME> get <ID>
+       hugo <DB_NAME> get <ID> [<DEFAULT>]
        hugo <DB_NAME> set <ID> [<TEXT>]
        hugo <DB_NAME> check <ID> [<TEXT>]
        hugo <DB_NAME> swap <ID> [<TEXT>]
