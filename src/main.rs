@@ -11,6 +11,9 @@ use std::io::sink;
 use std::path::Path;
 use std::process::exit;
 
+#[cfg(any(unix))] use std::os::unix::process::CommandExt;
+#[cfg(any(unix))] use std::process::Command;
+
 use app_dirs::*;
 use argparse::{ArgumentParser, StoreTrue, StoreOption, Store};
 use rusqlite::Connection;
@@ -30,6 +33,7 @@ enum Operation {
     Modify(ID, Option<String>, bool),
     Import(String),
     Remove(ID),
+    Shell,
 }
 
 #[derive(Debug)]
@@ -66,7 +70,7 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
     let mut is_path = false;
     let mut name = "".to_owned();
     let mut op = "".to_owned();
-    let mut id = "".to_owned();
+    let mut id: Option<String> = None;
     let mut arg: Option<String> = None;
 
     {
@@ -75,25 +79,33 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
         ap.refer(&mut is_path).add_option(&["-p", "--path"], StoreTrue, "Database name As a file path");
         ap.refer(&mut name).add_argument("Name", Store, "Database name").required();
         ap.refer(&mut op).add_argument("Operation", Store, "Operation (has/get/set/swap/check/import)").required();
-        ap.refer(&mut id).add_argument("ID", Store, "Data ID").required();
+        ap.refer(&mut id).add_argument("ID", StoreOption, "Data ID");
         ap.refer(&mut arg).add_argument("Argument", StoreOption, "The argument of operation");
         ap.parse(args().collect(), &mut sink(), &mut sink()).map_err(|_| HugoError::InvalidArgument)?;
     }
 
-    let op = match &*op {
-        "has" => Has(id),
-        "get" => Get(id, arg),
-        "set" => Set(id, arg),
-        "unset" | "remove" => Remove(id),
-        "swap" => Swap(id, arg),
-        "check" => Check(id, arg),
-        "inc" => Modify(id, arg, false),
-        "dec" => Modify(id, arg, true),
-        "import" => Import(id),
-        _ => return Err(Box::new(HugoError::InvalidArgument))
-    };
-
-    Ok((name, is_path, op))
+    if let Some(id) = id {
+        let op = match &*op {
+            "has" => Has(id),
+            "get" => Get(id, arg),
+            "set" => Set(id, arg),
+            "unset" | "remove" => Remove(id),
+            "swap" => Swap(id, arg),
+            "check" => Check(id, arg),
+            "inc" => Modify(id, arg, false),
+            "dec" => Modify(id, arg, true),
+            "import" => Import(id),
+            #[cfg(any(unix))] "shell" => Shell,
+            _ => return Err(Box::new(HugoError::InvalidArgument))
+        };
+        Ok((name, is_path, op))
+    } else {
+        if &*op == "shell" {
+            Ok((name, is_path, Shell))
+        } else {
+            Err(HugoError::InvalidArgument)?
+        }
+    }
 }
 
 
@@ -112,7 +124,7 @@ fn app() -> Result<(), Box<Error>> {
     if let Some(dir) = path.parent() {
         create_dir_all(dir)?;
     }
-    let conn = Connection::open(path)?;
+    let conn = Connection::open(&path)?;
     create_table(&conn)?;
 
     conn.execute("BEGIN;", &[])?;
@@ -129,6 +141,7 @@ fn app() -> Result<(), Box<Error>> {
         Swap(id, content) => print_content(&swap(&conn, &id, &content)?),
         Check(id, content) => check(&conn, &id, &content)?,
         Import(ref source) => import(&conn, source)?,
+        Shell => shell(&path)?,
         Remove(id) => remove(&conn, &id)?,
     };
 
@@ -213,6 +226,13 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     }
 
     Ok(result)
+}
+
+fn shell(path: &Path) -> Result<bool, Box<Error>> {
+    Command::new("sqlite3")
+        .arg(path)
+        .exec();
+    Ok(true)
 }
 
 fn remove(conn: &Connection, id: &str) -> Result<bool, Box<Error>> {
