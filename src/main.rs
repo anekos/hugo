@@ -105,7 +105,7 @@ fn app() -> Result<(), Box<Error>> {
     let path = if is_path {
         path.to_path_buf()
     } else {
-        let mut path = get_app_dir(AppDataType::UserCache, &APP_INFO, "db").unwrap();
+        let mut path = get_app_dir(AppDataType::UserData, &APP_INFO, "db").unwrap();
         path.push(format!("{}.sqlite", name));
         path
     };
