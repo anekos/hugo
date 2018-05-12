@@ -85,7 +85,7 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
     }
 
     if &*op == "shell" {
-        Ok((name, is_path, Shell(args().collect())))
+        Ok((name, is_path, Shell(args().skip(3).collect())))
     } else if let Some(id) = id {
         let op = match &*op {
             "has" => Has(id),
