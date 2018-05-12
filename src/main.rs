@@ -154,6 +154,7 @@ fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
 }
 
 
+#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
 fn get(conn: &Connection, id: &str, default: Option<String>) -> Result<Option<Option<String>>, rusqlite::Error> {
     use rusqlite::Error::QueryReturnedNoRows;
 
@@ -193,6 +194,7 @@ fn modify(conn: &Connection, id: &str, delta: &Option<String>, minus: bool) -> R
     Ok(modified)
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
 fn swap(conn: &Connection, id: &str, content: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
     let result = get(conn, id, None)?;
     set(conn, id, content)?;
@@ -263,6 +265,7 @@ impl Error for HugoError {
     }
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
 fn print_content(found: &Option<Option<String>>) -> bool {
     if let Some(ref found) = *found {
         if let Some(ref content) = *found {
