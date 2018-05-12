@@ -33,7 +33,7 @@ enum Operation {
     Modify(ID, Option<String>, bool),
     Import(String),
     Remove(ID),
-    Shell,
+    Shell(Vec<String>),
 }
 
 #[derive(Debug)]
@@ -84,7 +84,9 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
         ap.parse(args().collect(), &mut sink(), &mut sink()).map_err(|_| HugoError::InvalidArgument)?;
     }
 
-    if let Some(id) = id {
+    if &*op == "shell" {
+        Ok((name, is_path, Shell(args().collect())))
+    } else if let Some(id) = id {
         let op = match &*op {
             "has" => Has(id),
             "get" => Get(id, arg),
@@ -95,16 +97,11 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
             "inc" => Modify(id, arg, false),
             "dec" => Modify(id, arg, true),
             "import" => Import(id),
-            #[cfg(any(unix))] "shell" => Shell,
             _ => return Err(Box::new(HugoError::InvalidArgument))
         };
         Ok((name, is_path, op))
     } else {
-        if &*op == "shell" {
-            Ok((name, is_path, Shell))
-        } else {
-            Err(HugoError::InvalidArgument)?
-        }
+        Err(HugoError::InvalidArgument)?
     }
 }
 
@@ -141,7 +138,7 @@ fn app() -> Result<(), Box<Error>> {
         Swap(id, content) => print_content(&swap(&conn, &id, &content)?),
         Check(id, content) => check(&conn, &id, &content)?,
         Import(ref source) => import(&conn, source)?,
-        Shell => shell(&path)?,
+        Shell(ref args) => shell(&path, args)?,
         Remove(id) => remove(&conn, &id)?,
     };
 
@@ -228,9 +225,10 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     Ok(result)
 }
 
-fn shell(path: &Path) -> Result<bool, Box<Error>> {
+fn shell(path: &Path, args: &[String]) -> Result<bool, Box<Error>> {
     Command::new("sqlite3")
         .arg(path)
+        .args(args)
         .exec();
     Ok(true)
 }
