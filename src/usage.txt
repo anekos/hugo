@@ -1,20 +1,20 @@
-Usage: hugo <DB_NAME> has <ID>
-       hugo <DB_NAME> get <ID>
-       hugo <DB_NAME> set <ID> [<TEXT>]
-       hugo <DB_NAME> inc <ID> [<VALUE>]
-       hugo <DB_NAME> dec <ID> [<VALUE>]
-       hugo <DB_NAME> (unset|remove) <ID>
-       hugo <DB_NAME> check <ID> [<TEXT>]
-       hugo <DB_NAME> swap <ID> [<TEXT>]
+Usage: hugo <DB_NAME> has <KEY>
+       hugo <DB_NAME> get <KEY>
+       hugo <DB_NAME> set <KEY> [<TEXT>]
+       hugo <DB_NAME> inc <KEY> [<VALUE>]
+       hugo <DB_NAME> dec <KEY> [<VALUE>]
+       hugo <DB_NAME> (unset|remove) <KEY>
+       hugo <DB_NAME> check <KEY> [<TEXT>]
+       hugo <DB_NAME> swap <KEY> [<TEXT>]
        hugo <DB_NAME> import <SOUCE_DB_FILE_PATH>
        hugo <DB_NAME> shell [<SQLITE_COMMAND>]
 
 has:
-  If <DATA_FILE> has <ID>, `hugo` command succeeds.
+  If <DATA_FILE> has <KEY>, `hugo` command succeeds.
 get:
-  If <DATA_FILE> has <ID>, `hugo` command succeeds and print the value.
+  If <DATA_FILE> has <KEY>, `hugo` command succeeds and print the value.
 set:
-  Set <TEXT> with <ID>.
+  Set <TEXT> with <KEY>.
 check:
   `has` and `set`
 swap:
