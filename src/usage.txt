@@ -1,6 +1,8 @@
 Usage: hugo <DB_NAME> has <ID>
        hugo <DB_NAME> get <ID>
        hugo <DB_NAME> set <ID> [<TEXT>]
+       hugo <DB_NAME> inc <ID> [<VALUE>]
+       hugo <DB_NAME> dec <ID> [<VALUE>]
        hugo <DB_NAME> (unset|remove) <ID>
        hugo <DB_NAME> check <ID> [<TEXT>]
        hugo <DB_NAME> swap <ID> [<TEXT>]
