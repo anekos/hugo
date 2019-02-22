@@ -1,8 +1,3 @@
-extern crate app_dirs;
-extern crate argparse;
-extern crate rusqlite;
-extern crate time;
-
 use std::env::args;
 use std::error::Error;
 use std::fmt;
@@ -16,7 +11,8 @@ use std::process::exit;
 
 use app_dirs::*;
 use argparse::{ArgumentParser, StoreTrue, StoreOption, Store};
-use rusqlite::Connection;
+use rusqlite::types::ToSql;
+use rusqlite::{Connection, NO_PARAMS};
 
 
 
@@ -124,7 +120,7 @@ fn app() -> Result<(), Box<Error>> {
     let conn = Connection::open(&path)?;
     create_table(&conn)?;
 
-    conn.execute("BEGIN;", &[])?;
+    conn.execute("BEGIN;", NO_PARAMS)?;
 
     let ok = match op {
         Get(key, default) => print_value(&get(&conn, &key, default)?),
@@ -142,14 +138,14 @@ fn app() -> Result<(), Box<Error>> {
         Remove(key) => remove(&conn, &key)?,
     };
 
-    conn.execute("COMMIT;", &[])?;
+    conn.execute("COMMIT;", NO_PARAMS)?;
 
     exit(if ok { 0 } else { 1 })
 }
 
 
 fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
-    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", &[]).unwrap();
+    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", NO_PARAMS).unwrap();
     Ok(())
 }
 
@@ -177,8 +173,14 @@ fn has(conn: &Connection, key: &str) -> Result<bool, rusqlite::Error> {
 
 fn set(conn: &Connection, key: &str, value: &Option<String>) -> Result<bool, Box<Error>> {
     let now = time::get_time();
-    conn.execute("UPDATE flags SET value = ?, updated_at = ? WHERE key = ?", &[value, &now, &key])?;
-    conn.execute("INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)", &[&key, value, &now, &now])?;
+    conn.execute(
+        "UPDATE flags SET value = ?, updated_at = ? WHERE key = ?",
+        &[value, &now as &ToSql, &key]
+    )?;
+    conn.execute(
+        "INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+        &[&key, value as &ToSql, &now, &now]
+    )?;
     Ok(true)
 }
 
@@ -209,7 +211,7 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     let source_conn = Connection::open(source_path)?;
 
     let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at FROM flags;").unwrap();
-    let entry_iter = stmt.query_map(&[], |row| {
+    let entry_iter = stmt.query_map(NO_PARAMS, |row| {
         Entry {
             key: row.get(0),
             value: row.get(1),
