@@ -12,6 +12,7 @@ clap = "*"
 failure = "*"
 humantime = "*"
 time = "*"
+if-let-return = "*"
 
 [dependencies.rusqlite]
 version = "0.16"

@@ -2,6 +2,8 @@
 use clap::*;
 
 
+const TTL_HELP: &str = "TTL: `12 years 15days 2min 2s` / `2018-01-01T12:53:00Z` / `2018-01-01 12:53:00`";
+
 
 pub fn build_cli() -> App<'static, 'static> {
     app_from_crate!()
@@ -29,6 +31,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .short("t")
                          .long("ttl")
+                         .help(TTL_HELP)
                          .takes_value(true))
                     .arg(Arg::with_name("key")
                          .help("Key name")
@@ -42,6 +45,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .short("t")
                          .long("ttl")
+                         .help(TTL_HELP)
                          .takes_value(true))
                     .arg(Arg::with_name("key")
                          .help("Key name")
@@ -55,6 +59,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .short("t")
                          .long("ttl")
+                         .help(TTL_HELP)
                          .takes_value(true))
                     .arg(Arg::with_name("key")
                          .help("Key name")
@@ -75,6 +80,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .short("t")
                          .long("ttl")
+                         .help(TTL_HELP)
                          .takes_value(true))
                     .arg(Arg::with_name("key")
                          .help("Key name")
@@ -88,6 +94,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .short("t")
                          .long("ttl")
+                         .help(TTL_HELP)
                          .takes_value(true))
                     .arg(Arg::with_name("key")
                          .help("Key name")
@@ -105,5 +112,14 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("command")
                          .help("SQLite command")
                          .min_values(0)))
+        .subcommand(SubCommand::with_name("ttl")
+                    .alias("s")
+                    .about("Set the value")
+                    .arg(Arg::with_name("key")
+                         .help("Key name")
+                         .required(true))
+                    .arg(Arg::with_name("ttl")
+                         .help(TTL_HELP)
+                         .required(false)))
 
 }

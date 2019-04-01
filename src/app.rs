@@ -60,6 +60,10 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
     } else if let Some(ref matches) = matches.subcommand_matches("shell") {
         let command: Option<Vec<&str>> = matches.values_of("command").map(|it| it.collect());
         command::shell(&path, command.as_ref().map(|it| it.as_slice()))?
+    } else if let Some(ref matches) = matches.subcommand_matches("ttl") {
+        let key = matches.value_of("key").unwrap(); // required
+        let ttl = matches.value_of("ttl");
+        command::ttl(&conn, key, ttl)?
     } else {
         return Err(AppError::UnknownCommand);
     };

@@ -7,10 +7,11 @@ use std::time::{Duration, SystemTime};
 
 use chrono::DateTime;
 use chrono::offset::Utc;
+use if_let_return::if_let_some;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
 
-use crate::errors::{AppResult, AppResultU};
+use crate::errors::{AppError, AppResult, AppResultU};
 use crate::types::*;
 
 
@@ -27,33 +28,31 @@ fn get_value(conn: &Connection, key: &str) -> AppResult<Option<Option<String>>> 
     get_value_with_default(conn, key, None)
 }
 
-#[allow(clippy::option_option)]
-fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<Option<Option<String>>> {
-    use rusqlite::Error::QueryReturnedNoRows;
-
-    let result = conn.query_row("SELECT value, expired_at FROM flags WHERE key = ?;", &[key], |row| {
-        (row.get(0), row.get(1))
-    });
-
+#[allow(clippy::type_complexity)]
+fn get_value_and_ttl(conn: &Connection, key: &str) -> AppResult<Option<(Option<String>, Option<DateTime<Utc>>)>> {
+    let result = conn.query_row("SELECT value, expired_at FROM flags WHERE key = ?;", &[key], |row| (row.get(0), row.get(1)));
     match result {
         Ok((value, expired_at)) => {
             let now: DateTime<Utc> = SystemTime::now().into();
-            let expired_at: Option<DateTime<Utc>> = expired_at;
             if let Some(expired_at) = expired_at {
                 if expired_at <= now {
                     remove(conn, key)?;
-                    return Ok(None)
+                    return Ok(None);
                 }
             }
-            Ok(value)
+            Ok(Some((value, expired_at)))
         },
-        Err(ref err) => {
-            if let QueryReturnedNoRows = *err {
-                Ok(default.map(|it| Some(it.to_owned())))
-            } else {
-                Ok(None)
-            }
-        }
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(AppError::Sql(err)),
+    }
+}
+
+#[allow(clippy::option_option)]
+fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<Option<Option<String>>> {
+    if let Some((value, _)) = get_value_and_ttl(conn, key)? {
+        Ok(Some(value.or_else(|| default.map(Into::into))))
+    } else {
+        Ok(None)
     }
 }
 
@@ -144,6 +143,18 @@ pub fn shell(path: &Path, args: Option<&[&str]>) -> AppResult<bool> {
 pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
     let n = conn.execute("DELETE FROM flags WHERE key = ?", &[&key])?;
     Ok(n == 1)
+}
+
+pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
+    if_let_some!((_, expired_at) = get_value_and_ttl(conn, key)?, Ok(false));
+
+    if let Some(ttl) = ttl {
+        set_ttl(conn, key, ttl)?;
+    } else if let Some(expired_at) = expired_at {
+        println!("{}", expired_at.format("%Y-%m-%d %H:%M:%S"));
+    }
+
+    Ok(true)
 }
 
 fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
