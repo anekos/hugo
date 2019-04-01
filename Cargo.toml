@@ -7,11 +7,15 @@ edition = "2018"
 [dependencies]
 app_dirs = "*"
 argparse = "*"
+chrono = "*"
 clap = "*"
 failure = "*"
 humantime = "*"
-rusqlite = "0.16"
 time = "*"
+
+[dependencies.rusqlite]
+version = "0.16"
+features = ["chrono"]
 
 [dev-dependencies.cargo-husky]
 version = "1"
