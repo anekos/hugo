@@ -1,12 +1,12 @@
 
 use std::path::Path;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 #[cfg(any(unix))] use std::os::unix::process::CommandExt;
 #[cfg(any(unix))] use std::process::Command;
 
-use chrono::DateTime;
-use chrono::offset::Utc;
+use chrono::{NaiveDateTime, DateTime};
+use chrono::offset::{Local, TimeZone, Utc};
 use if_let_return::if_let_some;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
@@ -151,6 +151,7 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
     if let Some(ttl) = ttl {
         set_ttl(conn, key, ttl)?;
     } else if let Some(expired_at) = expired_at {
+        let expired_at = expired_at.with_timezone(&Local);
         println!("{}", expired_at.format("%Y-%m-%d %H:%M:%S"));
     }
 
@@ -158,10 +159,7 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
 }
 
 fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
-    let now = SystemTime::now();
-    let ttl: Duration = ttl.parse::<humantime::Duration>()?.into();
-    let expired_at = now + ttl;
-    let expired_at: DateTime<Utc> = expired_at.into();
+    let expired_at = parse_expired_at(ttl)?;
 
     let updated = conn.execute(
         "UPDATE flags SET expired_at = ? WHERE key = ?",
@@ -195,4 +193,22 @@ fn p(found: &Option<Option<String>>) -> bool {
     } else {
         false
     }
+}
+
+fn parse_expired_at(s: &str) -> AppResult<DateTime<Local>> {
+    let parse = |format: &'static str, suffix: &'static str| -> AppResult<DateTime<Local>> {
+        let dt = NaiveDateTime::parse_from_str(&format!("{}{}", s, suffix), format)?;
+        Ok(Local.from_local_datetime(&dt).unwrap())
+    };
+
+    parse("%Y-%m-%d %H:%M:%S", "")
+        .or_else(|_| parse("%Y/%m/%d %H:%M:%S", ""))
+        .or_else(|_| parse("%Y-%m-%d %H:%M:%S", " 00:00:00"))
+        .or_else(|_| parse("%Y/%m/%d %H:%M:%S", " 00:00:00"))
+        .or_else(|_| {
+            let ttl = humantime::parse_duration(s)?;
+            let now = SystemTime::now();
+            let expired_at: SystemTime = now + ttl;
+            Ok(expired_at.into())
+        })
 }
