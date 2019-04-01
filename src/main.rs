@@ -148,7 +148,7 @@ fn create_table(conn: &Connection) -> AppResultU {
 }
 
 
-#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
+#[allow(clippy::option_option)]
 fn get(conn: &Connection, key: &str, default: Option<String>) -> AppResult<Option<Option<String>>> {
     use rusqlite::Error::QueryReturnedNoRows;
 
@@ -194,7 +194,7 @@ fn modify(conn: &Connection, key: &str, delta: &Option<String>, minus: bool) -> 
     Ok(modified)
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
+#[allow(clippy::option_option)]
 fn swap(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<Option<Option<String>>> {
     let result = get(conn, key, None)?;
     set(conn, key, value)?;
@@ -241,7 +241,7 @@ fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
 }
 
 
-#[cfg_attr(feature = "cargo-clippy", allow(option_option))]
+#[allow(clippy::option_option)]
 fn print_value(found: &Option<Option<String>>) -> bool {
     if let Some(ref found) = *found {
         if let Some(ref value) = *found {

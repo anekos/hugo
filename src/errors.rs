@@ -18,8 +18,6 @@ pub enum AppError {
     Sql(rusqlite::Error),
     #[fail(display = "Number format Error: {}", 0)]
     NumberFormat(std::num::ParseFloatError),
-    #[fail(display = "Void")]
-    Void,
 }
 
 
