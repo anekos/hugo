@@ -1,6 +1,4 @@
 use std::env::args;
-use std::error::Error;
-use std::fmt;
 use std::fs::create_dir_all;
 use std::io::sink;
 use std::path::Path;
@@ -13,6 +11,10 @@ use app_dirs::*;
 use argparse::{ArgumentParser, StoreTrue, StoreOption, Store};
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
+
+mod errors;
+
+use errors::{AppError, AppResult, AppResultU};
 
 
 
@@ -41,10 +43,6 @@ struct Entry {
 }
 
 
-#[derive(Debug)]
-enum HugoError {
-    InvalidArgument,
-}
 
 
 
@@ -60,7 +58,7 @@ fn main() {
 }
 
 
-fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
+fn parse_args() -> AppResult<(String, bool, Operation)> {
     use self::Operation::*;
 
     let mut is_path = false;
@@ -77,7 +75,7 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
         ap.refer(&mut op).add_argument("Operation", Store, "Operation (has/get/set/swap/check/import)").required();
         ap.refer(&mut key).add_argument("Key", StoreOption, "Data Key");
         ap.refer(&mut arg).add_argument("Argument", StoreOption, "The argument of operation");
-        ap.parse(args().collect(), &mut sink(), &mut sink()).map_err(|_| HugoError::InvalidArgument)?;
+        ap.parse(args().collect(), &mut sink(), &mut sink()).map_err(|_| AppError::InvalidArgument)?;
     }
 
     if &*op == "shell" {
@@ -93,16 +91,16 @@ fn parse_args() -> Result<(String, bool, Operation), Box<Error>> {
             "inc" => Modify(key, arg, false),
             "dec" => Modify(key, arg, true),
             "import" => Import(key),
-            _ => return Err(Box::new(HugoError::InvalidArgument))
+            _ => return Err(AppError::InvalidArgument)
         };
         Ok((name, is_path, op))
     } else {
-        Err(HugoError::InvalidArgument)?
+        Err(AppError::InvalidArgument)?
     }
 }
 
 
-fn app() -> Result<(), Box<Error>> {
+fn app() -> AppResultU {
     use self::Operation::*;
 
     let (name, is_path, op) = parse_args()?;
@@ -144,14 +142,14 @@ fn app() -> Result<(), Box<Error>> {
 }
 
 
-fn create_table(conn: &Connection) -> Result<(), Box<Error>> {
-    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", NO_PARAMS).unwrap();
+fn create_table(conn: &Connection) -> AppResultU {
+    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expired_at TEXT);", NO_PARAMS).unwrap();
     Ok(())
 }
 
 
 #[cfg_attr(feature = "cargo-clippy", allow(option_option))]
-fn get(conn: &Connection, key: &str, default: Option<String>) -> Result<Option<Option<String>>, rusqlite::Error> {
+fn get(conn: &Connection, key: &str, default: Option<String>) -> AppResult<Option<Option<String>>> {
     use rusqlite::Error::QueryReturnedNoRows;
 
     let result = conn.query_row("SELECT value FROM flags WHERE key = ?;", &[&key], |row| {
@@ -164,14 +162,14 @@ fn get(conn: &Connection, key: &str, default: Option<String>) -> Result<Option<O
         }
     }
 
-    result.map(Some)
+    Ok(result.map(Some)?)
 }
 
-fn has(conn: &Connection, key: &str) -> Result<bool, rusqlite::Error> {
+fn has(conn: &Connection, key: &str) -> AppResult<bool> {
     get(conn, key, None).map(|it| it.is_some())
 }
 
-fn set(conn: &Connection, key: &str, value: &Option<String>) -> Result<bool, Box<Error>> {
+fn set(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<bool> {
     let now = time::get_time();
     conn.execute(
         "UPDATE flags SET value = ?, updated_at = ? WHERE key = ?",
@@ -184,7 +182,7 @@ fn set(conn: &Connection, key: &str, value: &Option<String>) -> Result<bool, Box
     Ok(true)
 }
 
-fn modify(conn: &Connection, key: &str, delta: &Option<String>, minus: bool) -> Result<f64, Box<Error>> {
+fn modify(conn: &Connection, key: &str, delta: &Option<String>, minus: bool) -> AppResult<f64> {
     let delta = delta.as_ref().map(|it| it.parse()).unwrap_or(Ok(1.0))?;
 
     let found = get(conn, key, None)?;
@@ -197,17 +195,17 @@ fn modify(conn: &Connection, key: &str, delta: &Option<String>, minus: bool) -> 
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(option_option))]
-fn swap(conn: &Connection, key: &str, value: &Option<String>) -> Result<Option<Option<String>>, Box<Error>> {
+fn swap(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<Option<Option<String>>> {
     let result = get(conn, key, None)?;
     set(conn, key, value)?;
     Ok(result)
 }
 
-fn check(conn: &Connection, key: &str, value: &Option<String>) -> Result<bool, Box<Error>> {
+fn check(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<bool> {
     swap(conn, key, value).map(|it| it.is_some())
 }
 
-fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
+fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let source_conn = Connection::open(source_path)?;
 
     let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at FROM flags;").unwrap();
@@ -229,7 +227,7 @@ fn import(conn: &Connection, source_path: &str) -> Result<bool, Box<Error>> {
     Ok(result)
 }
 
-fn shell(path: &Path, args: &[String]) -> Result<bool, Box<Error>> {
+fn shell(path: &Path, args: &[String]) -> AppResult<bool> {
     Command::new("sqlite3")
         .arg(path)
         .args(args)
@@ -237,35 +235,11 @@ fn shell(path: &Path, args: &[String]) -> Result<bool, Box<Error>> {
     Ok(true)
 }
 
-fn remove(conn: &Connection, key: &str) -> Result<bool, Box<Error>> {
+fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
     let n = conn.execute("DELETE FROM flags WHERE key = ?", &[&key])?;
     Ok(n == 1)
 }
 
-
-impl fmt::Display for HugoError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::HugoError::*;
-
-        match *self {
-            InvalidArgument => write!(f, "Invalid argument"),
-        }
-    }
-}
-
-impl Error for HugoError {
-    fn description(&self) -> &str {
-        use self::HugoError::*;
-
-        match *self {
-            InvalidArgument => "Invalid argument",
-        }
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        None
-    }
-}
 
 #[cfg_attr(feature = "cargo-clippy", allow(option_option))]
 fn print_value(found: &Option<Option<String>>) -> bool {

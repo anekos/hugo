@@ -5,7 +5,9 @@ authors = ["anekos <anekos@snca.net>"]
 edition = "2018"
 
 [dependencies]
-rusqlite = "0.16"
-time = "*"
 app_dirs = "*"
 argparse = "*"
+failure = "*"
+humantime = "*"
+rusqlite = "0.16"
+time = "*"
