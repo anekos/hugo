@@ -15,17 +15,26 @@ use crate::types::*;
 pub static USAGE: &'static str = include_str!("usage.txt");
 
 
+pub fn get(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<bool> {
+    Ok(p(&get_value_with_default(conn, key, default)?))
+}
+
 #[allow(clippy::option_option)]
-pub fn get(conn: &Connection, key: &str, default: Option<String>) -> AppResult<Option<Option<String>>> {
+fn get_value(conn: &Connection, key: &str) -> AppResult<Option<Option<String>>> {
+    get_value_with_default(conn, key, None)
+}
+
+#[allow(clippy::option_option)]
+fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<Option<Option<String>>> {
     use rusqlite::Error::QueryReturnedNoRows;
 
-    let result = conn.query_row("SELECT value FROM flags WHERE key = ?;", &[&key], |row| {
+    let result = conn.query_row("SELECT value FROM flags WHERE key = ?;", &[key], |row| {
         row.get(0)
     });
 
     if let Err(ref err) = result {
         if let QueryReturnedNoRows = *err {
-             return Ok(default.map(Some));
+             return Ok(default.map(|it| Some(it.to_owned())));
         }
     }
 
@@ -33,43 +42,53 @@ pub fn get(conn: &Connection, key: &str, default: Option<String>) -> AppResult<O
 }
 
 pub fn has(conn: &Connection, key: &str) -> AppResult<bool> {
-    get(conn, key, None).map(|it| it.is_some())
+    get_value(conn, key).map(|it| it.is_some())
 }
 
-pub fn set(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<bool> {
+pub fn set(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
     let now = time::get_time();
     conn.execute(
         "UPDATE flags SET value = ?, updated_at = ? WHERE key = ?",
-        &[value, &now as &ToSql, &key]
+        &[&value as &ToSql, &now as &ToSql, &key]
     )?;
     conn.execute(
         "INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)",
-        &[&key, value as &ToSql, &now, &now]
+        &[&key, &value as &ToSql, &now, &now]
     )?;
     Ok(true)
 }
 
-pub fn modify(conn: &Connection, key: &str, delta: &Option<String>, minus: bool) -> AppResult<f64> {
+pub fn modify(conn: &Connection, key: &str, delta: Option<&str>, minus: bool) -> AppResult<bool> {
+    let result = modify_value(conn, key, delta, minus)?;
+    println!("{}", result);
+    Ok(true)
+}
+
+fn modify_value(conn: &Connection, key: &str, delta: Option<&str>, minus: bool) -> AppResult<f64> {
     let delta = delta.as_ref().map(|it| it.parse()).unwrap_or(Ok(1.0))?;
 
-    let found = get(conn, key, None)?;
+    let found = get_value(conn, key)?;
     let current = found.and_then(|it| it.map(|it| it.parse())).unwrap_or(Ok(0.0))?;
     let modified = current + delta * if minus { -1.0 } else { 1.0 };
 
-    set(conn, key, &Some(format!("{}", modified)))?;
+    set(conn, key, Some(&format!("{}", modified)))?;
 
     Ok(modified)
 }
 
+pub fn swap(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
+    Ok(p(&swap_values(conn, key, value)?))
+}
+
 #[allow(clippy::option_option)]
-pub fn swap(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<Option<Option<String>>> {
-    let result = get(conn, key, None)?;
+fn swap_values(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<Option<Option<String>>> {
+    let result = get_value(conn, key)?;
     set(conn, key, value)?;
     Ok(result)
 }
 
-pub fn check(conn: &Connection, key: &str, value: &Option<String>) -> AppResult<bool> {
-    swap(conn, key, value).map(|it| it.is_some())
+pub fn check(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
+    swap_values(conn, key, value).map(|it| it.is_some())
 }
 
 pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
@@ -88,17 +107,19 @@ pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let mut result = true;
     for entry in entry_iter {
         let entry = entry?;
-        result &= set(conn, &entry.key, &entry.value)?;
+        result &= set(conn, &entry.key, entry.value.as_ref().map(String::as_ref))?;
     }
 
     Ok(result)
 }
 
-pub fn shell(path: &Path, args: &[String]) -> AppResult<bool> {
-    Command::new("sqlite3")
-        .arg(path)
-        .args(args)
-        .exec();
+pub fn shell(path: &Path, args: Option<&[&str]>) -> AppResult<bool> {
+    let mut command = Command::new("sqlite3");
+    command.arg(path);
+    if let Some(args) = args {
+        command.args(args);
+    }
+    command.exec();
     Ok(true)
 }
 
@@ -108,8 +129,12 @@ pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
 }
 
 
+pub fn usage() {
+    eprintln!("{}", USAGE);
+}
+
 #[allow(clippy::option_option)]
-pub fn print_value(found: &Option<Option<String>>) -> bool {
+fn p(found: &Option<Option<String>>) -> bool {
     if let Some(ref found) = *found {
         if let Some(ref value) = *found {
             println!("{}", value);
@@ -119,8 +144,3 @@ pub fn print_value(found: &Option<Option<String>>) -> bool {
         false
     }
 }
-
-pub fn usage() {
-    eprintln!("{}", USAGE);
-}
-

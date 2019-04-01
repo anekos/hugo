@@ -10,14 +10,14 @@ pub type AppResultU = Result<(), AppError>;
 
 #[derive(Fail, Debug)]
 pub enum AppError {
-    #[fail(display = "Invalid argument")]
-    InvalidArgument,
     #[fail(display = "IO Error: {}", 0)]
     Io(std::io::Error),
-    #[fail(display = "SQL Error: {}", 0)]
-    Sql(rusqlite::Error),
     #[fail(display = "Number format Error: {}", 0)]
     NumberFormat(std::num::ParseFloatError),
+    #[fail(display = "SQL Error: {}", 0)]
+    Sql(rusqlite::Error),
+    #[fail(display = "Unknown command")]
+    UnknownCommand,
 }
 
 
