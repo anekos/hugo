@@ -111,7 +111,14 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
     if_let_some!((_, expired_at) = get_value_and_ttl(conn, key)?, Ok(false));
 
     if let Some(ttl) = ttl {
-        set_ttl(conn, key, ttl)?;
+        let expired_at = parse_ttl(ttl)?;
+        let updated = conn.execute(
+            "UPDATE flags SET expired_at = ? WHERE key = ?",
+            &[&expired_at as &ToSql, &key]
+        )?;
+        if updated != 1 {
+            panic!("WTF!");
+        }
     } else if let Some(expired_at) = expired_at {
         let expired_at = expired_at.with_timezone(&Local);
         println!("{}", expired_at.format("%Y-%m-%d %H:%M:%S"));
@@ -223,19 +230,6 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
     )?;
 
     Ok(true)
-}
-
-fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
-    let expired_at = parse_ttl(ttl)?;
-
-    let updated = conn.execute(
-        "UPDATE flags SET expired_at = ? WHERE key = ?",
-        &[&expired_at as &ToSql, &key]
-    )?;
-    if updated != 1 {
-        panic!("WTF!");
-    }
-    Ok(())
 }
 
 #[allow(clippy::option_option)]
