@@ -92,6 +92,6 @@ fn initialize(database_name: &str) -> AppResult<(PathBuf, Connection)> {
 }
 
 fn create_table(conn: &Connection) -> AppResultU {
-    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expired_at INTEGER);", NO_PARAMS).unwrap();
+    conn.execute("CREATE TABLE IF NOT EXISTS h (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expired_at INTEGER);", NO_PARAMS).unwrap();
     Ok(())
 }

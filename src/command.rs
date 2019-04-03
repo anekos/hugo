@@ -28,7 +28,7 @@ pub fn get(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<boo
 }
 
 pub fn gc(conn: &Connection) -> AppResult<bool> {
-    let mut stmt = conn.prepare("SELECT key, expired_at FROM flags WHERE expired_at IS NOT NULL;")?;
+    let mut stmt = conn.prepare("SELECT key, expired_at FROM h WHERE expired_at IS NOT NULL;")?;
 
     let entries = stmt.query_map(NO_PARAMS, |row| -> (String, DateTime<Utc>) {
         (row.get(0), row.get(1))
@@ -53,7 +53,7 @@ pub fn has(conn: &Connection, key: &str) -> AppResult<bool> {
 pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let source_conn = Connection::open(source_path)?;
 
-    let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at, expired_at FROM flags;").unwrap();
+    let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at, expired_at FROM h;").unwrap();
     let entry_iter = stmt.query_map(NO_PARAMS, |row| {
         Entry {
             key: row.get(0),
@@ -80,7 +80,7 @@ pub fn modify(conn: &Connection, key: &str, delta: Option<&str>, minus: bool, tt
 }
 
 pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
-    let n = conn.execute("DELETE FROM flags WHERE key = ?", &[&key])?;
+    let n = conn.execute("DELETE FROM h WHERE key = ?", &[&key])?;
     Ok(n == 1)
 }
 
@@ -113,7 +113,7 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
     if let Some(ttl) = ttl {
         let expired_at = parse_ttl(ttl)?;
         let updated = conn.execute(
-            "UPDATE flags SET expired_at = ? WHERE key = ?",
+            "UPDATE h SET expired_at = ? WHERE key = ?",
             &[&expired_at as &ToSql, &key]
         )?;
         if updated != 1 {
@@ -145,7 +145,7 @@ fn get_value(conn: &Connection, key: &str) -> AppResult<Option<Option<String>>> 
 
 #[allow(clippy::type_complexity)]
 fn get_value_and_ttl(conn: &Connection, key: &str) -> AppResult<Option<(Option<String>, Option<DateTime<Utc>>)>> {
-    let result = conn.query_row("SELECT value, expired_at FROM flags WHERE key = ?;", &[key], |row| (row.get(0), row.get(1)));
+    let result = conn.query_row("SELECT value, expired_at FROM h WHERE key = ?;", &[key], |row| (row.get(0), row.get(1)));
     match result {
         Ok((value, expired_at)) => {
             if let Some(expired_at) = expired_at {
@@ -221,11 +221,11 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
     let now: DateTime<Utc> = SystemTime::now().into();
 
     conn.execute(
-        "UPDATE flags SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
+        "UPDATE h SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
         &[&value as &ToSql, &now as &ToSql, &key, &expired_at as &ToSql]
     )?;
     conn.execute(
-        "INSERT INTO flags SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+        "INSERT INTO h SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
         &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
     )?;
 
