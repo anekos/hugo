@@ -211,7 +211,7 @@ fn parse_ttl(s: &str) -> AppResult<DateTime<Utc>> {
 }
 
 pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: Option<DateTime<Utc>>) -> AppResult<bool> {
-    let now = time::get_time();
+    let now: DateTime<Utc> = SystemTime::now().into();
 
     conn.execute(
         "UPDATE flags SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",

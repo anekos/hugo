@@ -8,7 +8,7 @@ use chrono::DateTime;
 pub struct Entry {
     pub key: String,
     pub value: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub expired_at: Option<DateTime<Utc>>,
 }
