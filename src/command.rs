@@ -53,20 +53,21 @@ pub fn has(conn: &Connection, key: &str) -> AppResult<bool> {
 pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let source_conn = Connection::open(source_path)?;
 
-    let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at FROM flags;").unwrap();
+    let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at, expired_at FROM flags;").unwrap();
     let entry_iter = stmt.query_map(NO_PARAMS, |row| {
         Entry {
             key: row.get(0),
             value: row.get(1),
             created_at: row.get(2),
-            updated_at: row.get(3)
+            updated_at: row.get(3),
+            expired_at: row.get(4),
         }
     }).unwrap();
 
     let mut result = true;
     for entry in entry_iter {
         let entry = entry?;
-        result &= set(conn, &entry.key, entry.value.as_ref().map(String::as_ref), None)?;
+        result &= set_value(conn, &entry.key, entry.value.as_ref().map(String::as_ref), entry.expired_at)?;
     }
 
     Ok(result)
@@ -84,18 +85,12 @@ pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
 }
 
 pub fn set(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
-    let now = time::get_time();
-    conn.execute(
-        "UPDATE flags SET value = ?, updated_at = ? WHERE key = ?",
-        &[&value as &ToSql, &now as &ToSql, &key]
-    )?;
-    conn.execute(
-        "INSERT INTO flags SELECT ?, ?, ?, ?, NULL WHERE (SELECT changes() = 0)",
-        &[&key, &value as &ToSql, &now, &now]
-    )?;
-
-    set_ttl_opt(conn, key, ttl)?;
-    Ok(true)
+    let expired_at = if let Some(ttl) = ttl {
+        Some(parse_ttl(ttl)?)
+    } else {
+        None
+    };
+    set_value(conn, key, value, expired_at)
 }
 
 pub fn shell(path: &Path, args: Option<&[&str]>) -> AppResult<bool> {
@@ -197,7 +192,7 @@ fn p(found: &Option<Option<String>>) -> bool {
     }
 }
 
-fn parse_expired_at(s: &str) -> AppResult<DateTime<Local>> {
+fn parse_ttl(s: &str) -> AppResult<DateTime<Utc>> {
     let parse = |format: &'static str, suffix: &'static str| -> AppResult<DateTime<Local>> {
         let dt = NaiveDateTime::parse_from_str(&format!("{}{}", s, suffix), format)?;
         Ok(Local.from_local_datetime(&dt).unwrap())
@@ -207,16 +202,31 @@ fn parse_expired_at(s: &str) -> AppResult<DateTime<Local>> {
         .or_else(|_| parse("%Y/%m/%d %H:%M:%S", ""))
         .or_else(|_| parse("%Y-%m-%d %H:%M:%S", " 00:00:00"))
         .or_else(|_| parse("%Y/%m/%d %H:%M:%S", " 00:00:00"))
-        .or_else(|_| {
+        .or_else(|_| -> AppResult<DateTime<Local>>{
             let ttl = humantime::parse_duration(s)?;
             let now = SystemTime::now();
             let expired_at: SystemTime = now + ttl;
             Ok(expired_at.into())
-        })
+        }).map(|it| it.with_timezone(&Utc))
+}
+
+pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: Option<DateTime<Utc>>) -> AppResult<bool> {
+    let now = time::get_time();
+
+    conn.execute(
+        "UPDATE flags SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
+        &[&value as &ToSql, &now as &ToSql, &key, &expired_at as &ToSql]
+    )?;
+    conn.execute(
+        "INSERT INTO flags SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+        &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
+    )?;
+
+    Ok(true)
 }
 
 fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
-    let expired_at = parse_expired_at(ttl)?;
+    let expired_at = parse_ttl(ttl)?;
 
     let updated = conn.execute(
         "UPDATE flags SET expired_at = ? WHERE key = ?",
@@ -224,13 +234,6 @@ fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
     )?;
     if updated != 1 {
         panic!("WTF!");
-    }
-    Ok(())
-}
-
-fn set_ttl_opt(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResultU {
-    if let Some(ttl) = ttl {
-        set_ttl(conn, key, ttl)?;
     }
     Ok(())
 }
