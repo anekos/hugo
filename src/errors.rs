@@ -16,6 +16,12 @@ pub enum AppError {
     NumberFormat(std::num::ParseFloatError),
     #[fail(display = "SQL Error: {}", 0)]
     Sql(rusqlite::Error),
+    #[fail(display = "Time Calculation Error: {}", 0)]
+    Time(std::time::SystemTimeError),
+    #[fail(display = "TTL Format Error: {}", 0)]
+    TtlFormatDateTime(chrono::format::ParseError),
+    #[fail(display = "TTL Format Error: {}", 0)]
+    TtlFormatDuration(humantime::DurationError),
     #[fail(display = "Unknown command")]
     UnknownCommand,
 }
@@ -34,3 +40,6 @@ macro_rules! define_error {
 define_error!(rusqlite::Error, Sql);
 define_error!(std::io::Error, Io);
 define_error!(std::num::ParseFloatError, NumberFormat);
+define_error!(chrono::format::ParseError, TtlFormatDateTime);
+define_error!(humantime::DurationError, TtlFormatDuration);
+define_error!(std::time::SystemTimeError, Time);

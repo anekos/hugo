@@ -29,32 +29,41 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
     } else if let Some(ref matches) = matches.subcommand_matches("set") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
-        command::set(&conn, key, value)?
+        let ttl = matches.value_of("ttl");
+        command::set(&conn, key, value, ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("inc") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
-        command::modify(&conn, key, value, false)?
+        let ttl = matches.value_of("ttl");
+        command::modify(&conn, key, value, false, ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("dec") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
-        command::modify(&conn, key, value, true)?
+        let ttl = matches.value_of("ttl");
+        command::modify(&conn, key, value, true, ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("unset") {
         let key = matches.value_of("key").unwrap(); // required
         command::remove(&conn, key)?
     } else if let Some(ref matches) = matches.subcommand_matches("check") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
-        command::check(&conn, key, value)?
+        let ttl = matches.value_of("ttl");
+        command::check(&conn, key, value, ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("swap") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
-        command::swap(&conn, key, value)?
+        let ttl = matches.value_of("ttl");
+        command::swap(&conn, key, value, ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("import") {
         let filepath = matches.value_of("file-path").unwrap(); // required
         command::import(&conn, filepath)?
     } else if let Some(ref matches) = matches.subcommand_matches("shell") {
         let command: Option<Vec<&str>> = matches.values_of("command").map(|it| it.collect());
         command::shell(&path, command.as_ref().map(|it| it.as_slice()))?
+    } else if let Some(ref matches) = matches.subcommand_matches("ttl") {
+        let key = matches.value_of("key").unwrap(); // required
+        let ttl = matches.value_of("ttl");
+        command::ttl(&conn, key, ttl)?
     } else {
         return Err(AppError::UnknownCommand);
     };
@@ -77,6 +86,6 @@ fn initialize(database_name: &str) -> AppResult<(PathBuf, Connection)> {
 }
 
 fn create_table(conn: &Connection) -> AppResultU {
-    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);", NO_PARAMS).unwrap();
+    conn.execute("CREATE TABLE IF NOT EXISTS flags (key TEXT PRIMARY KEY, value TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expired_at INTEGER);", NO_PARAMS).unwrap();
     Ok(())
 }

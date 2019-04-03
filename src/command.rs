@@ -1,13 +1,17 @@
 
 use std::path::Path;
+use std::time::SystemTime;
 
 #[cfg(any(unix))] use std::os::unix::process::CommandExt;
 #[cfg(any(unix))] use std::process::Command;
 
+use chrono::{NaiveDateTime, DateTime};
+use chrono::offset::{Local, TimeZone, Utc};
+use if_let_return::if_let_some;
 use rusqlite::types::ToSql;
 use rusqlite::{Connection, NO_PARAMS};
 
-use crate::errors::AppResult;
+use crate::errors::{AppError, AppResult, AppResultU};
 use crate::types::*;
 
 
@@ -24,71 +28,84 @@ fn get_value(conn: &Connection, key: &str) -> AppResult<Option<Option<String>>> 
     get_value_with_default(conn, key, None)
 }
 
+#[allow(clippy::type_complexity)]
+fn get_value_and_ttl(conn: &Connection, key: &str) -> AppResult<Option<(Option<String>, Option<DateTime<Utc>>)>> {
+    let result = conn.query_row("SELECT value, expired_at FROM flags WHERE key = ?;", &[key], |row| (row.get(0), row.get(1)));
+    match result {
+        Ok((value, expired_at)) => {
+            let now: DateTime<Utc> = SystemTime::now().into();
+            if let Some(expired_at) = expired_at {
+                if expired_at <= now {
+                    remove(conn, key)?;
+                    return Ok(None);
+                }
+            }
+            Ok(Some((value, expired_at)))
+        },
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(AppError::Sql(err)),
+    }
+}
+
 #[allow(clippy::option_option)]
 fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<Option<Option<String>>> {
-    use rusqlite::Error::QueryReturnedNoRows;
-
-    let result = conn.query_row("SELECT value FROM flags WHERE key = ?;", &[key], |row| {
-        row.get(0)
-    });
-
-    if let Err(ref err) = result {
-        if let QueryReturnedNoRows = *err {
-             return Ok(default.map(|it| Some(it.to_owned())));
-        }
+    if let Some((value, _)) = get_value_and_ttl(conn, key)? {
+        Ok(Some(value.or_else(|| default.map(Into::into))))
+    } else {
+        Ok(None)
     }
-
-    Ok(result.map(Some)?)
 }
 
 pub fn has(conn: &Connection, key: &str) -> AppResult<bool> {
     get_value(conn, key).map(|it| it.is_some())
 }
 
-pub fn set(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
+pub fn set(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
     let now = time::get_time();
     conn.execute(
         "UPDATE flags SET value = ?, updated_at = ? WHERE key = ?",
         &[&value as &ToSql, &now as &ToSql, &key]
     )?;
     conn.execute(
-        "INSERT INTO flags SELECT ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+        "INSERT INTO flags SELECT ?, ?, ?, ?, NULL WHERE (SELECT changes() = 0)",
         &[&key, &value as &ToSql, &now, &now]
     )?;
+
+    set_ttl_opt(conn, key, ttl)?;
     Ok(true)
 }
 
-pub fn modify(conn: &Connection, key: &str, delta: Option<&str>, minus: bool) -> AppResult<bool> {
-    let result = modify_value(conn, key, delta, minus)?;
+pub fn modify(conn: &Connection, key: &str, delta: Option<&str>, minus: bool, ttl: Option<&str>) -> AppResult<bool> {
+    let result = modify_value(conn, key, delta, minus, ttl)?;
     println!("{}", result);
     Ok(true)
 }
 
-fn modify_value(conn: &Connection, key: &str, delta: Option<&str>, minus: bool) -> AppResult<f64> {
+fn modify_value(conn: &Connection, key: &str, delta: Option<&str>, minus: bool, ttl: Option<&str>) -> AppResult<f64> {
     let delta = delta.as_ref().map(|it| it.parse()).unwrap_or(Ok(1.0))?;
 
     let found = get_value(conn, key)?;
     let current = found.and_then(|it| it.map(|it| it.parse())).unwrap_or(Ok(0.0))?;
     let modified = current + delta * if minus { -1.0 } else { 1.0 };
 
-    set(conn, key, Some(&format!("{}", modified)))?;
+    set(conn, key, Some(&format!("{}", modified)), ttl)?;
 
     Ok(modified)
 }
 
-pub fn swap(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
-    Ok(p(&swap_values(conn, key, value)?))
+pub fn swap(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
+    Ok(p(&swap_values(conn, key, value, ttl)?))
 }
 
 #[allow(clippy::option_option)]
-fn swap_values(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<Option<Option<String>>> {
+fn swap_values(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<Option<Option<String>>> {
     let result = get_value(conn, key)?;
-    set(conn, key, value)?;
+    set(conn, key, value, ttl)?;
     Ok(result)
 }
 
-pub fn check(conn: &Connection, key: &str, value: Option<&str>) -> AppResult<bool> {
-    swap_values(conn, key, value).map(|it| it.is_some())
+pub fn check(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
+    swap_values(conn, key, value, ttl).map(|it| it.is_some())
 }
 
 pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
@@ -107,7 +124,7 @@ pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let mut result = true;
     for entry in entry_iter {
         let entry = entry?;
-        result &= set(conn, &entry.key, entry.value.as_ref().map(String::as_ref))?;
+        result &= set(conn, &entry.key, entry.value.as_ref().map(String::as_ref), None)?;
     }
 
     Ok(result)
@@ -128,6 +145,39 @@ pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
     Ok(n == 1)
 }
 
+pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
+    if_let_some!((_, expired_at) = get_value_and_ttl(conn, key)?, Ok(false));
+
+    if let Some(ttl) = ttl {
+        set_ttl(conn, key, ttl)?;
+    } else if let Some(expired_at) = expired_at {
+        let expired_at = expired_at.with_timezone(&Local);
+        println!("{}", expired_at.format("%Y-%m-%d %H:%M:%S"));
+    }
+
+    Ok(true)
+}
+
+fn set_ttl(conn: &Connection, key: &str, ttl: &str) -> AppResultU {
+    let expired_at = parse_expired_at(ttl)?;
+
+    let updated = conn.execute(
+        "UPDATE flags SET expired_at = ? WHERE key = ?",
+        &[&expired_at as &ToSql, &key]
+    )?;
+    if updated != 1 {
+        panic!("WTF!");
+    }
+    Ok(())
+}
+
+fn set_ttl_opt(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResultU {
+    if let Some(ttl) = ttl {
+        set_ttl(conn, key, ttl)?;
+    }
+    Ok(())
+}
+
 
 pub fn usage() {
     eprintln!("{}", USAGE);
@@ -143,4 +193,22 @@ fn p(found: &Option<Option<String>>) -> bool {
     } else {
         false
     }
+}
+
+fn parse_expired_at(s: &str) -> AppResult<DateTime<Local>> {
+    let parse = |format: &'static str, suffix: &'static str| -> AppResult<DateTime<Local>> {
+        let dt = NaiveDateTime::parse_from_str(&format!("{}{}", s, suffix), format)?;
+        Ok(Local.from_local_datetime(&dt).unwrap())
+    };
+
+    parse("%Y-%m-%d %H:%M:%S", "")
+        .or_else(|_| parse("%Y/%m/%d %H:%M:%S", ""))
+        .or_else(|_| parse("%Y-%m-%d %H:%M:%S", " 00:00:00"))
+        .or_else(|_| parse("%Y/%m/%d %H:%M:%S", " 00:00:00"))
+        .or_else(|_| {
+            let ttl = humantime::parse_duration(s)?;
+            let now = SystemTime::now();
+            let expired_at: SystemTime = now + ttl;
+            Ok(expired_at.into())
+        })
 }
