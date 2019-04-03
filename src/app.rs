@@ -64,11 +64,17 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
         let key = matches.value_of("key").unwrap(); // required
         let ttl = matches.value_of("ttl");
         command::ttl(&conn, key, ttl)?
+    } else if matches.subcommand_matches("gc").is_some() {
+        command::gc(&conn)?
     } else {
         return Err(AppError::UnknownCommand);
     };
 
     conn.execute("COMMIT", NO_PARAMS)?;
+
+    if matches.subcommand_matches("gc").is_some() {
+        command::vacuum(&conn)?;
+    }
 
     Ok(result)
 }

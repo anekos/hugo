@@ -121,5 +121,7 @@ pub fn build_cli() -> App<'static, 'static> {
                     .arg(Arg::with_name("ttl")
                          .help(TTL_HELP)
                          .required(false)))
+        .subcommand(SubCommand::with_name("gc")
+                    .about("Vacuum and remove expired items"))
 
 }

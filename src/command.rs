@@ -27,6 +27,25 @@ pub fn get(conn: &Connection, key: &str, default: Option<&str>) -> AppResult<boo
     Ok(p(&get_value_with_default(conn, key, default)?))
 }
 
+pub fn gc(conn: &Connection) -> AppResult<bool> {
+    let mut stmt = conn.prepare("SELECT key, expired_at FROM flags WHERE expired_at IS NOT NULL;")?;
+
+    let entries = stmt.query_map(NO_PARAMS, |row| -> (String, DateTime<Utc>) {
+        (row.get(0), row.get(1))
+    })?;
+
+    let is_expired = is_expired();
+
+    for entry in entries {
+        let (ref key, ref expired_at) = entry?;
+        if is_expired(expired_at) {
+            remove(conn, key)?;
+        }
+    }
+
+    Ok(true)
+}
+
 pub fn has(conn: &Connection, key: &str) -> AppResult<bool> {
     get_value(conn, key).map(|it| it.is_some())
 }
@@ -110,6 +129,11 @@ pub fn usage() {
     eprintln!("{}", USAGE);
 }
 
+pub fn vacuum(conn: &Connection) -> AppResultU {
+    conn.execute("VACUUM", NO_PARAMS)?;
+    Ok(())
+}
+
 
 
 #[allow(clippy::option_option)]
@@ -122,9 +146,8 @@ fn get_value_and_ttl(conn: &Connection, key: &str) -> AppResult<Option<(Option<S
     let result = conn.query_row("SELECT value, expired_at FROM flags WHERE key = ?;", &[key], |row| (row.get(0), row.get(1)));
     match result {
         Ok((value, expired_at)) => {
-            let now: DateTime<Utc> = SystemTime::now().into();
             if let Some(expired_at) = expired_at {
-                if expired_at <= now {
+                if is_expired()(&expired_at) {
                     remove(conn, key)?;
                     return Ok(None);
                 }
@@ -143,6 +166,11 @@ fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -
     } else {
         Ok(None)
     }
+}
+
+fn is_expired() -> Box<Fn(&DateTime<Utc>) -> bool> {
+    let now: DateTime<Utc> = SystemTime::now().into();
+    Box::new(move |expired_at| *expired_at <= now)
 }
 
 fn modify_value(conn: &Connection, key: &str, delta: Option<&str>, minus: bool, ttl: Option<&str>) -> AppResult<f64> {
