@@ -16,9 +16,6 @@ use crate::types::*;
 
 
 
-pub static USAGE: &'static str = include_str!("usage.txt");
-
-
 pub fn check(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
     swap_values(conn, key, value, ttl).map(|it| it.is_some())
 }
@@ -125,10 +122,6 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
     }
 
     Ok(true)
-}
-
-pub fn usage() {
-    eprintln!("{}", USAGE);
 }
 
 pub fn vacuum(conn: &Connection) -> AppResultU {

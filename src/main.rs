@@ -16,7 +16,7 @@ fn main() {
         Ok(succeed) => exit(if succeed { 0 } else { 1 }),
         Err(e) => {
             eprintln!("{}\n", e);
-            command::usage();
+            eprintln!("{}", matches.usage());
             exit(2)
         },
     }
