@@ -215,7 +215,7 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
 
     conn.execute(
         "UPDATE h SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
-        &[&value as &ToSql, &now as &ToSql, &key, &expired_at as &ToSql]
+        &[&value as &ToSql, &now as &ToSql, &expired_at as &ToSql, &key]
     )?;
     conn.execute(
         "INSERT INTO h SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
