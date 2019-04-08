@@ -213,14 +213,20 @@ fn parse_ttl(s: &str) -> AppResult<DateTime<Utc>> {
 pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: Option<DateTime<Utc>>) -> AppResult<bool> {
     let now: DateTime<Utc> = SystemTime::now().into();
 
-    conn.execute(
+    let updated = conn.execute(
         "UPDATE h SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
         &[&value as &ToSql, &now as &ToSql, &expired_at as &ToSql, &key]
     )?;
-    conn.execute(
-        "INSERT INTO h SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
-        &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
-    )?;
+    match updated {
+        0 => {
+            conn.execute(
+                "INSERT INTO h SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+                &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
+            )?;
+        },
+        1 => (),
+        n => panic!("UPDATE has returned: {}", n),
+    }
 
     Ok(true)
 }
