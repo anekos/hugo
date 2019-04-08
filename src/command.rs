@@ -220,7 +220,7 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
     match updated {
         0 => {
             conn.execute(
-                "INSERT INTO h SELECT ?, ?, ?, ?, ? WHERE (SELECT changes() = 0)",
+                "INSERT INTO h SELECT ?, ?, ?, ?, ?",
                 &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
             )?;
         },
