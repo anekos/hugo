@@ -19,6 +19,12 @@ pub trait Command {
 mod arg {
     use super::Command;
 
+    pub trait ShellCommand: Command {
+        fn shell_command(&self) -> Option<Vec<&str>> {
+            self.matches().values_of("command").map(Iterator::collect)
+        }
+    }
+
     pub trait Filepath: Command {
         fn filepath(&self) -> &str {
             self.matches().value_of("filepath").unwrap()

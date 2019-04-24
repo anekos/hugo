@@ -1,6 +1,4 @@
 
-use std::iter::Iterator;
-
 #[cfg(any(unix))] use std::os::unix::process::CommandExt;
 
 use chrono::offset::{Local, Utc};
@@ -96,11 +94,10 @@ defcmd!(Set, Key, Ttl, Value => (self, conn) {
     set_value(conn, self.key(), self.value(), expired_at)
 });
 
-defcmd!(Shell, Key => (self, _conn, path) {
-    let args: Option<Vec<&str>> = self.matches().values_of("command").map(Iterator::collect);
+defcmd!(Shell, Key, ShellCommand => (self, _conn, path) {
     let mut command = std::process::Command::new("sqlite3");
     command.arg(path.as_ref());
-    if let Some(args) = args {
+    if let Some(args) = self.shell_command() {
         command.args(args);
     }
     command.exec();
