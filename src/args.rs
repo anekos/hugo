@@ -23,7 +23,7 @@ pub fn build_cli() -> App<'static, 'static> {
                          .help("Key name")
                          .required(true))
                     .arg(Arg::with_name("default")
-                         .help("Print this value if key not found")
+                         .help("Print this if the value is empty")
                          .required(false)))
         .subcommand(SubCommand::with_name("set")
                     .alias("s")
