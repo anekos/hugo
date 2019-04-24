@@ -16,11 +16,11 @@ use crate::errors::{AppError, AppResult};
 
 
 
-defcmd!(Check, KeyArg, ValueArg, TtlArg => (self, conn) {
+defcmd!(Check, Key, Value, Ttl => (self, conn) {
     swap_values(conn, self.key(), self.value(), self.ttl()).map(|it| it.is_some())
 });
 
-defcmd!(Get, KeyArg, DefaultValueArg => (self, conn) {
+defcmd!(Get, Key, DefaultValue => (self, conn) {
     Ok(p(&get_value_with_default(conn, self.key(), self.default())?))
 });
 
@@ -43,23 +43,23 @@ defcmd!(Gc => (self, conn) {
     Ok(true)
 });
 
-defcmd!(Has, KeyArg => (self, conn) {
+defcmd!(Has, Key => (self, conn) {
     get_value(conn, self.key()).map(|it| it.is_some())
 });
 
-defcmd!(Increment, KeyArg, ValueArg, TtlArg => (self, conn) {
+defcmd!(Increment, Key, Value, Ttl => (self, conn) {
     let result = modify_value(conn, self.key(), self.value(), false, self.ttl())?;
     println!("{}", result);
     Ok(true)
 });
 
-defcmd!(Decrement, KeyArg, ValueArg, TtlArg => (self, conn) {
+defcmd!(Decrement, Key, Value, Ttl => (self, conn) {
     let result = modify_value(conn, self.key(), self.value(), true, self.ttl())?;
     println!("{}", result);
     Ok(true)
 });
 
-defcmd!(Import, FilepathArg => (self, conn) {
+defcmd!(Import, Filepath => (self, conn) {
     let source_conn = Connection::open(self.filepath())?;
 
     let mut stmt = source_conn.prepare("SELECT key, value, created_at, updated_at, expired_at FROM h;").unwrap();
@@ -82,12 +82,12 @@ defcmd!(Import, FilepathArg => (self, conn) {
     Ok(result)
 });
 
-defcmd!(Remove, KeyArg => (self, conn) {
+defcmd!(Remove, Key => (self, conn) {
     let n = conn.execute("DELETE FROM h WHERE key = ?", &[self.key()])?;
     Ok(n == 1)
 });
 
-defcmd!(Set, KeyArg, TtlArg, ValueArg => (self, conn) {
+defcmd!(Set, Key, Ttl, Value => (self, conn) {
     let expired_at = if let Some(ttl) = self.ttl() {
         Some(parse_ttl(ttl)?)
     } else {
@@ -96,7 +96,7 @@ defcmd!(Set, KeyArg, TtlArg, ValueArg => (self, conn) {
     set_value(conn, self.key(), self.value(), expired_at)
 });
 
-defcmd!(Shell, KeyArg => (self, _conn, path) {
+defcmd!(Shell, Key => (self, _conn, path) {
     let args: Option<Vec<&str>> = self.matches().values_of("command").map(Iterator::collect);
     let mut command = std::process::Command::new("sqlite3");
     command.arg(path.as_ref());
@@ -108,11 +108,11 @@ defcmd!(Shell, KeyArg => (self, _conn, path) {
 });
 
 
-defcmd!(Swap, KeyArg, ValueArg, TtlArg => (self, conn) {
+defcmd!(Swap, Key, Value, Ttl => (self, conn) {
     Ok(p(&swap_values(conn, self.key(), self.value(), self.ttl())?))
 });
 
-defcmd!(Ttl, KeyArg, ValueArg, TtlArg => (self, conn) {
+defcmd!(Ttl, Key, Value, Ttl => (self, conn) {
     if_let_some!((_, expired_at) = get_value_and_ttl(conn, self.key())?, Ok(false));
 
     if let Some(ttl) = self.ttl() {

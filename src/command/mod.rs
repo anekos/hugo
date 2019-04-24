@@ -16,33 +16,37 @@ pub trait Command {
     fn run<T: AsRef<Path>>(&self, connection: &Connection, path: &T) -> AppResult<bool>;
 }
 
-pub trait FilepathArg: Command {
-    fn filepath(&self) -> &str {
-        self.matches().value_of("filepath").unwrap()
-    }
-}
+mod arg {
+    use super::Command;
 
-pub trait TtlArg: Command {
-    fn ttl(&self) -> Option<&str> {
-        self.matches().value_of("ttl")
+    pub trait Filepath: Command {
+        fn filepath(&self) -> &str {
+            self.matches().value_of("filepath").unwrap()
+        }
     }
-}
 
-pub trait KeyArg: Command {
-    fn key(&self) -> &str {
-        self.matches().value_of("key").unwrap()
+    pub trait Ttl: Command {
+        fn ttl(&self) -> Option<&str> {
+            self.matches().value_of("ttl")
+        }
     }
-}
 
-pub trait ValueArg: Command {
-    fn value(&self) -> Option<&str> {
-        self.matches().value_of("value")
+    pub trait Key: Command {
+        fn key(&self) -> &str {
+            self.matches().value_of("key").unwrap()
+        }
     }
-}
 
-pub trait DefaultValueArg: Command {
-    fn default(&self) -> Option<&str> {
-        self.matches().value_of("default")
+    pub trait Value: Command {
+        fn value(&self) -> Option<&str> {
+            self.matches().value_of("value")
+        }
+    }
+
+    pub trait DefaultValue: Command {
+        fn default(&self) -> Option<&str> {
+            self.matches().value_of("default")
+        }
     }
 }
 
@@ -64,11 +68,13 @@ macro_rules! defcmd {
             }
 
             fn run<T: AsRef<std::path::Path>>(&$self, $connection: &Connection, $path: &T) -> AppResult<bool> {
+                #[allow(unused_imports)]
+                use crate::command::arg::*;
                 $body
             }
         }
 
-        $(impl<'a> $arg for $name<'a> {})*
+        $(impl<'a> arg::$arg for $name<'a> {})*
     };
 
     ($name:ident $(, $arg:ident)* => ($self:ident, $connection:ident) $body:expr) => {
