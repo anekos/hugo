@@ -17,7 +17,14 @@ pub trait Command {
 }
 
 mod arg {
+    use std::time::SystemTime;
+    use chrono::offset::{Local, TimeZone, Utc};
+    use chrono::{NaiveDateTime, DateTime};
+
+    use crate::errors::AppResult;
+
     use super::Command;
+
 
     pub trait ShellCommand: Command {
         fn shell_command(&self) -> Option<Vec<&str>> {
@@ -32,8 +39,25 @@ mod arg {
     }
 
     pub trait Ttl: Command {
-        fn ttl(&self) -> Option<&str> {
-            self.matches().value_of("ttl")
+        fn expired_at(&self) -> AppResult<Option<DateTime<Utc>>> {
+
+            self.matches().value_of("ttl").map(|ttl| {
+                let parse = |format: &'static str, suffix: &'static str| -> AppResult<DateTime<Local>> {
+                    let dt = NaiveDateTime::parse_from_str(&format!("{}{}", ttl, suffix), format)?;
+                    Ok(Local.from_local_datetime(&dt).unwrap())
+                };
+
+                parse("%Y-%m-%d %H:%M:%S", "")
+                    .or_else(|_| parse("%Y/%m/%d %H:%M:%S", ""))
+                    .or_else(|_| parse("%Y-%m-%d %H:%M:%S", " 00:00:00"))
+                    .or_else(|_| parse("%Y/%m/%d %H:%M:%S", " 00:00:00"))
+                    .or_else(|_| -> AppResult<DateTime<Local>>{
+                        let ttl = humantime::parse_duration(ttl)?;
+                        let now = SystemTime::now();
+                        let expired_at: SystemTime = now + ttl;
+                        Ok(expired_at.into())
+                    }).map(|it| it.with_timezone(&Utc))
+            }).transpose()
         }
     }
 
@@ -52,6 +76,12 @@ mod arg {
     pub trait DefaultValue: Command {
         fn default(&self) -> Option<&str> {
             self.matches().value_of("default")
+        }
+    }
+
+    pub trait Refresh: Command {
+        fn refresh(&self) -> bool {
+            self.matches().is_present("refresh")
         }
     }
 }
