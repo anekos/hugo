@@ -12,6 +12,8 @@ pub type AppResultU = Result<(), AppError>;
 pub enum AppError {
     #[fail(display = "IO Error: {}", 0)]
     Io(std::io::Error),
+    #[fail(display = "`--refresh` option requires `--ttl`")]
+    NoTtlForRefresh,
     #[fail(display = "Number format Error: {}", 0)]
     NumberFormat(std::num::ParseFloatError),
     #[fail(display = "SQL Error: {}", 0)]

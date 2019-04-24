@@ -14,12 +14,12 @@ use crate::errors::{AppError, AppResult};
 
 
 
-defcmd!(Check, Key, Value, Ttl => (self, conn) {
-    swap_values(conn, self.key(), self.value(), self.ttl()).map(|it| it.is_some())
+defcmd!(Check, Key, Value, Ttl, Refresh => (self, conn) {
+    swap_values(conn, self.key(), self.value(), self.expired_at()?, self.refresh()).map(|it| it.is_some())
 });
 
-defcmd!(Get, Key, DefaultValue => (self, conn) {
-    Ok(p(&get_value_with_default(conn, self.key(), self.default())?))
+defcmd!(Get, DefaultValue, Key, Refresh, Ttl => (self, conn) {
+    Ok(p(&get_value_with_default(conn, self.key(), self.default(), self.refresh(), self.expired_at()?)?))
 });
 
 defcmd!(Gc => (self, conn) {
@@ -41,18 +41,18 @@ defcmd!(Gc => (self, conn) {
     Ok(true)
 });
 
-defcmd!(Has, Key => (self, conn) {
-    get_value(conn, self.key()).map(|it| it.is_some())
+defcmd!(Has, Key, Refresh, Ttl => (self, conn) {
+    get_value(conn, self.key(), self.expired_at()?, self.refresh()).map(|it| it.is_some())
 });
 
-defcmd!(Increment, Key, Value, Ttl => (self, conn) {
-    let result = modify_value(conn, self.key(), self.value(), false, self.ttl())?;
+defcmd!(Increment, Key, Value, Ttl, Refresh => (self, conn) {
+    let result = modify_value(conn, self.key(), self.value(), false, self.expired_at()?, self.refresh())?;
     println!("{}", result);
     Ok(true)
 });
 
-defcmd!(Decrement, Key, Value, Ttl => (self, conn) {
-    let result = modify_value(conn, self.key(), self.value(), true, self.ttl())?;
+defcmd!(Decrement, Key, Value, Ttl, Refresh => (self, conn) {
+    let result = modify_value(conn, self.key(), self.value(), true, self.expired_at()?, self.refresh())?;
     println!("{}", result);
     Ok(true)
 });
@@ -86,12 +86,7 @@ defcmd!(Remove, Key => (self, conn) {
 });
 
 defcmd!(Set, Key, Ttl, Value => (self, conn) {
-    let expired_at = if let Some(ttl) = self.ttl() {
-        Some(parse_ttl(ttl)?)
-    } else {
-        None
-    };
-    set_value(conn, self.key(), self.value(), expired_at)
+    set_value(conn, self.key(), self.value(), self.expired_at()?)
 });
 
 defcmd!(Shell, Key, ShellCommand => (self, _conn, path) {
@@ -105,15 +100,14 @@ defcmd!(Shell, Key, ShellCommand => (self, _conn, path) {
 });
 
 
-defcmd!(Swap, Key, Value, Ttl => (self, conn) {
-    Ok(p(&swap_values(conn, self.key(), self.value(), self.ttl())?))
+defcmd!(Swap, Key, Value, Ttl, Refresh => (self, conn) {
+    Ok(p(&swap_values(conn, self.key(), self.value(), self.expired_at()?, self.refresh())?))
 });
 
 defcmd!(Ttl, Key, Value, Ttl => (self, conn) {
-    if_let_some!((_, expired_at) = get_value_and_ttl(conn, self.key())?, Ok(false));
+    if_let_some!((_, expired_at) = get_value_and_expired_at(conn, self.key())?, Ok(false));
 
-    if let Some(ttl) = self.ttl() {
-        let expired_at = parse_ttl(ttl)?;
+    if let Some(expired_at) = self.expired_at()? {
         let updated = conn.execute(
             "UPDATE h SET expired_at = ? WHERE key = ?",
             &[&expired_at as &ToSql, &self.key()]
