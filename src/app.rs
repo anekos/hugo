@@ -6,8 +6,8 @@ use app_dirs::*;
 use clap::ArgMatches;
 use rusqlite::{Connection, NO_PARAMS};
 
-use crate::command;
-use crate::errors::{AppError, AppResult, AppResultU};
+use crate::command::Command;
+use crate::errors::{AppResult, AppResultU};
 
 
 
@@ -15,65 +15,44 @@ const APP_INFO: AppInfo = AppInfo { name: "hugo", author: "anekos" };
 
 
 pub fn run(matches: &ArgMatches) -> AppResult<bool> {
+    use crate::command::impls::*;
+
     let database_name = matches.value_of("database-name").unwrap(); // required
 
     let (path, conn) = initialize(&database_name)?;
 
-    let result = if let Some(ref matches) = matches.subcommand_matches("has") {
-        let key = matches.value_of("key").unwrap(); // required
-        command::has(&conn, key)?
-    } else if let Some(ref matches) = matches.subcommand_matches("get") {
-        let key = matches.value_of("key").unwrap(); // required
-        let default: Option<&str> = matches.value_of("default");
-        command::get(&conn, key, default)?
-    } else if let Some(ref matches) = matches.subcommand_matches("set") {
-        let key = matches.value_of("key").unwrap(); // required
-        let value = matches.value_of("value");
-        let ttl = matches.value_of("ttl");
-        command::set(&conn, key, value, ttl)?
-    } else if let Some(ref matches) = matches.subcommand_matches("inc") {
-        let key = matches.value_of("key").unwrap(); // required
-        let value = matches.value_of("value");
-        let ttl = matches.value_of("ttl");
-        command::modify(&conn, key, value, false, ttl)?
+    let result = if let Some(ref matches) = matches.subcommand_matches("check") {
+        Check::new(matches).run(&conn, &path)?
     } else if let Some(ref matches) = matches.subcommand_matches("dec") {
-        let key = matches.value_of("key").unwrap(); // required
-        let value = matches.value_of("value");
-        let ttl = matches.value_of("ttl");
-        command::modify(&conn, key, value, true, ttl)?
-    } else if let Some(ref matches) = matches.subcommand_matches("unset") {
-        let key = matches.value_of("key").unwrap(); // required
-        command::remove(&conn, key)?
-    } else if let Some(ref matches) = matches.subcommand_matches("check") {
-        let key = matches.value_of("key").unwrap(); // required
-        let value = matches.value_of("value");
-        let ttl = matches.value_of("ttl");
-        command::check(&conn, key, value, ttl)?
-    } else if let Some(ref matches) = matches.subcommand_matches("swap") {
-        let key = matches.value_of("key").unwrap(); // required
-        let value = matches.value_of("value");
-        let ttl = matches.value_of("ttl");
-        command::swap(&conn, key, value, ttl)?
-    } else if let Some(ref matches) = matches.subcommand_matches("import") {
-        let filepath = matches.value_of("file-path").unwrap(); // required
-        command::import(&conn, filepath)?
-    } else if let Some(ref matches) = matches.subcommand_matches("shell") {
-        let command: Option<Vec<&str>> = matches.values_of("command").map(|it| it.collect());
-        command::shell(&path, command.as_ref().map(|it| it.as_slice()))?
-    } else if let Some(ref matches) = matches.subcommand_matches("ttl") {
-        let key = matches.value_of("key").unwrap(); // required
-        let ttl = matches.value_of("ttl");
-        command::ttl(&conn, key, ttl)?
+        Decrement::new(matches).run(&conn, &path)?
     } else if matches.subcommand_matches("gc").is_some() {
-        command::gc(&conn)?
+        Gc::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("get") {
+        Get::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("has") {
+        Has::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("import") {
+        Import::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("inc") {
+        Increment::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("set") {
+        Set::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("shell") {
+        Shell::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("swap") {
+        Swap::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("ttl") {
+        Ttl::new(matches).run(&conn, &path)?
+    } else if let Some(ref matches) = matches.subcommand_matches("unset") {
+        Remove::new(matches).run(&conn, &path)?
     } else {
-        return Err(AppError::UnknownCommand);
+        Unknown::new(matches).run(&conn, &path)?
     };
 
     conn.execute("COMMIT", NO_PARAMS)?;
 
     if matches.subcommand_matches("gc").is_some() {
-        command::vacuum(&conn)?;
+        conn.execute("VACUUM", NO_PARAMS)?;
     }
 
     Ok(result)
