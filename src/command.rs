@@ -111,7 +111,7 @@ pub fn ttl(conn: &Connection, key: &str, ttl: Option<&str>) -> AppResult<bool> {
         let expired_at = parse_ttl(ttl)?;
         let updated = conn.execute(
             "UPDATE h SET expired_at = ? WHERE key = ?",
-            &[&expired_at as &ToSql, &key]
+            &[&expired_at as &dyn ToSql, &key]
         )?;
         if updated != 1 {
             panic!("WTF!");
@@ -163,7 +163,7 @@ fn get_value_with_default(conn: &Connection, key: &str, default: Option<&str>) -
     }
 }
 
-fn is_expired() -> Box<Fn(&DateTime<Utc>) -> bool> {
+fn is_expired() -> Box<dyn Fn(&DateTime<Utc>) -> bool> {
     let now: DateTime<Utc> = SystemTime::now().into();
     Box::new(move |expired_at| *expired_at <= now)
 }
@@ -215,13 +215,13 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
 
     let updated = conn.execute(
         "UPDATE h SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
-        &[&value as &ToSql, &now as &ToSql, &expired_at as &ToSql, &key]
+        &[&value as &dyn ToSql, &now as &dyn ToSql, &expired_at as &dyn ToSql, &key]
     )?;
     match updated {
         0 => {
             conn.execute(
                 "INSERT INTO h SELECT ?, ?, ?, ?, ?",
-                &[&key, &value as &ToSql, &now, &now, &expired_at as &ToSql]
+                &[&key, &value as &dyn ToSql, &now, &now, &expired_at as &dyn ToSql]
             )?;
         },
         1 => (),
