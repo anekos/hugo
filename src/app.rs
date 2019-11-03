@@ -6,7 +6,7 @@ use app_dirs::*;
 use clap::ArgMatches;
 use rusqlite::{Connection, NO_PARAMS};
 
-use crate::command;
+use crate::command::{self, Value};
 use crate::errors::{AppError, AppResult, AppResultU};
 
 
@@ -30,7 +30,8 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
         let ttl = matches.value_of("ttl");
-        command::set(&conn, key, value, ttl)?
+        let stdin = matches.is_present("stdin");
+        command::set(&conn, key, Value::new(value, stdin), ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("inc") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
@@ -48,12 +49,14 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
         let ttl = matches.value_of("ttl");
-        command::check(&conn, key, value, ttl)?
+        let stdin = matches.is_present("stdin");
+        command::check(&conn, key, Value::new(value, stdin), ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("swap") {
         let key = matches.value_of("key").unwrap(); // required
         let value = matches.value_of("value");
         let ttl = matches.value_of("ttl");
-        command::swap(&conn, key, value, ttl)?
+        let stdin = matches.is_present("stdin");
+        command::swap(&conn, key, Value::new(value, stdin), ttl)?
     } else if let Some(ref matches) = matches.subcommand_matches("import") {
         let filepath = matches.value_of("file-path").unwrap(); // required
         command::import(&conn, filepath)?

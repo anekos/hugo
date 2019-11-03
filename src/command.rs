@@ -1,4 +1,6 @@
 
+use std::borrow::Cow;
+use std::io::{Read, stdin};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -16,7 +18,31 @@ use crate::types::*;
 
 
 
-pub fn check(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
+pub struct Value<'a> {
+    from_stdin: bool,
+    value: Option<&'a str>,
+}
+
+
+impl<'a> Value<'a> {
+    pub fn new(value: Option<&'a str>, from_stdin: bool) -> Self {
+        Value { value, from_stdin }
+    }
+
+    fn fetch(&self) -> AppResult<Option<Cow<'a, str>>> {
+       if self.from_stdin {
+           let value = stdin();
+           let mut value = value.lock();
+           let mut result = "".to_owned();
+           value.read_to_string(&mut result)?;
+           return Ok(Some(result.into()))
+       }
+       Ok(self.value.map(|it| it.into()))
+    }
+}
+
+
+pub fn check(conn: &Connection, key: &str, value: Value, ttl: Option<&str>) -> AppResult<bool> {
     swap_values(conn, key, value, ttl).map(|it| it.is_some())
 }
 
@@ -64,7 +90,8 @@ pub fn import(conn: &Connection, source_path: &str) -> AppResult<bool> {
     let mut result = true;
     for entry in entry_iter {
         let entry = entry?;
-        result &= set_value(conn, &entry.key, entry.value.as_ref().map(String::as_ref), entry.expired_at)?;
+        let value = entry.value.as_ref().map(String::as_ref);
+        result &= set_value(conn, &entry.key, Value::new(value, false), entry.expired_at)?;
     }
 
     Ok(result)
@@ -81,7 +108,7 @@ pub fn remove(conn: &Connection, key: &str) -> AppResult<bool> {
     Ok(n == 1)
 }
 
-pub fn set(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
+pub fn set(conn: &Connection, key: &str, value: Value, ttl: Option<&str>) -> AppResult<bool> {
     let expired_at = if let Some(ttl) = ttl {
         Some(parse_ttl(ttl)?)
     } else {
@@ -100,7 +127,7 @@ pub fn shell(path: &Path, args: Option<&[&str]>) -> AppResult<bool> {
     Ok(true)
 }
 
-pub fn swap(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<bool> {
+pub fn swap(conn: &Connection, key: &str, value: Value, ttl: Option<&str>) -> AppResult<bool> {
     Ok(p(&swap_values(conn, key, value, ttl)?))
 }
 
@@ -175,7 +202,7 @@ fn modify_value(conn: &Connection, key: &str, delta: Option<&str>, minus: bool, 
     let current = found.and_then(|it| it.map(|it| it.parse())).unwrap_or(Ok(0.0))?;
     let modified = current + delta * if minus { -1.0 } else { 1.0 };
 
-    set(conn, key, Some(&format!("{}", modified)), ttl)?;
+    set(conn, key, Value::new(Some(&format!("{}", modified)), false), ttl)?;
 
     Ok(modified)
 }
@@ -210,8 +237,9 @@ fn parse_ttl(s: &str) -> AppResult<DateTime<Utc>> {
         }).map(|it| it.with_timezone(&Utc))
 }
 
-pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: Option<DateTime<Utc>>) -> AppResult<bool> {
+pub fn set_value(conn: &Connection, key: &str, value: Value, expired_at: Option<DateTime<Utc>>) -> AppResult<bool> {
     let now: DateTime<Utc> = SystemTime::now().into();
+    let value = value.fetch()?;
 
     let updated = conn.execute(
         "UPDATE h SET value = ?, updated_at = ?, expired_at = ? WHERE key = ?",
@@ -232,7 +260,7 @@ pub fn set_value(conn: &Connection, key: &str, value: Option<&str>, expired_at: 
 }
 
 #[allow(clippy::option_option)]
-fn swap_values(conn: &Connection, key: &str, value: Option<&str>, ttl: Option<&str>) -> AppResult<Option<Option<String>>> {
+fn swap_values(conn: &Connection, key: &str, value: Value, ttl: Option<&str>) -> AppResult<Option<Option<String>>> {
     let result = get_value(conn, key)?;
     set(conn, key, value, ttl)?;
     Ok(result)
