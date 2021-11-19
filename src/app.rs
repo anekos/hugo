@@ -19,31 +19,31 @@ pub fn run(matches: &ArgMatches) -> AppResult<bool> {
 
     let database_name = matches.value_of("database-name").unwrap(); // required
 
-    let (path, conn) = initialize(&database_name)?;
+    let (path, conn) = initialize(database_name)?;
 
-    let result = if let Some(ref matches) = matches.subcommand_matches("check") {
+    let result = if let Some(matches) = matches.subcommand_matches("check") {
         Check::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("dec") {
+    } else if let Some(matches) = matches.subcommand_matches("dec") {
         Decrement::new(matches).run(&conn, &path)?
     } else if matches.subcommand_matches("gc").is_some() {
         Gc::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("get") {
+    } else if let Some(matches) = matches.subcommand_matches("get") {
         Get::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("has") {
+    } else if let Some(matches) = matches.subcommand_matches("has") {
         Has::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("import") {
+    } else if let Some(matches) = matches.subcommand_matches("import") {
         Import::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("inc") {
+    } else if let Some(matches) = matches.subcommand_matches("inc") {
         Increment::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("set") {
+    } else if let Some(matches) = matches.subcommand_matches("set") {
         Set::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("shell") {
+    } else if let Some(matches) = matches.subcommand_matches("shell") {
         Shell::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("swap") {
+    } else if let Some(matches) = matches.subcommand_matches("swap") {
         Swap::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("ttl") {
+    } else if let Some(matches) = matches.subcommand_matches("ttl") {
         Ttl::new(matches).run(&conn, &path)?
-    } else if let Some(ref matches) = matches.subcommand_matches("unset") {
+    } else if let Some(matches) = matches.subcommand_matches("unset") {
         Remove::new(matches).run(&conn, &path)?
     } else {
         Unknown::new(matches).run(&conn, &path)?
